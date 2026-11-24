@@ -5,6 +5,16 @@ import {
   WorkOrder,
 } from '../types';
 
+const escapeHtml = (unsafe?: string | number): string => {
+  if (unsafe === undefined || unsafe === null) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 export const shareChecklistViaWhatsApp = (
   chk: FleetChecklist,
   amb?: Ambulance
@@ -96,17 +106,21 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
     .map(
       (i) => `
       <tr>
-        <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:11px;">${i.section}</td>
-        <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:11px;font-weight:600;">${i.label}</td>
+        <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:11px;">${escapeHtml(
+          i.section
+        )}</td>
+        <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:11px;font-weight:600;">${escapeHtml(
+          i.label
+        )}</td>
         <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:11px;text-align:center;font-weight:700;color:${
           i.status === 'Avería'
             ? '#be123c'
             : i.status === 'Observación'
             ? '#b45309'
             : '#15803d'
-        };">${i.status}</td>
+        };">${escapeHtml(i.status)}</td>
         <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:11px;">${
-          i.comment || '-'
+          escapeHtml(i.comment) || '-'
         }</td>
       </tr>`
     )
@@ -117,17 +131,22 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
       ? chk.missingParts
           .map(
             (m) =>
-              `<li><strong>${m.partName}</strong>: Faltan ${m.missingQty} uds. (${m.actionRequired})</li>`
+              `<li><strong>${escapeHtml(m.partName)}</strong>: Faltan ${escapeHtml(
+                m.missingQty
+              )} uds. (${escapeHtml(m.actionRequired)})</li>`
           )
           .join('')
       : '<li>Dotación de piezas a bordo del vehículo completa.</li>';
 
+  const safePhotos = (chk.photos || []).filter((p) =>
+    p.startsWith('data:image/')
+  );
   const photosHtml =
-    chk.photos && chk.photos.length > 0
+    safePhotos.length > 0
       ? `<div style="margin-top:16px;">
-          <h3 style="font-size:13px;margin-bottom:8px;">Evidencias Fotográficas Adjuntas (${chk.photos.length})</h3>
+          <h3 style="font-size:13px;margin-bottom:8px;">Evidencias Fotográficas Adjuntas (${safePhotos.length})</h3>
           <div style="display:flex;flex-wrap:wrap;gap:10px;">
-            ${chk.photos
+            ${safePhotos
               .map(
                 (p) =>
                   `<img src="${p}" style="width:160px;height:115px;object-fit:cover;border:1px solid #94a3b8;border-radius:6px;" />`
@@ -137,22 +156,25 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
         </div>`
       : '';
 
-  const signatureHtml = chk.inspectorSignature
-    ? `<div style="margin-top:20px;border-top:1px solid #cbd5e1;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+  const signatureHtml =
+    chk.inspectorSignature && chk.inspectorSignature.startsWith('data:image/')
+      ? `<div style="margin-top:20px;border-top:1px solid #cbd5e1;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
         <div>
           <p style="font-size:12px;font-weight:bold;margin:0;">Firmado por Responsable de Flota:</p>
-          <p style="font-size:11px;color:#475569;margin:2px 0;">${chk.inspectorName}</p>
+          <p style="font-size:11px;color:#475569;margin:2px 0;">${escapeHtml(
+            chk.inspectorName
+          )}</p>
         </div>
         <img src="${chk.inspectorSignature}" style="height:65px;border:1px solid #cbd5e1;padding:4px;border-radius:6px;" />
       </div>`
-    : '';
+      : '';
 
   win.document.write(`
     <!doctype html>
     <html lang="es">
     <head>
       <meta charset="utf-8" />
-      <title>Checklist ${amb?.code || ''} - ${chk.date}</title>
+      <title>Checklist ${escapeHtml(amb?.code)} - ${escapeHtml(chk.date)}</title>
       <style>
         body { font-family: Arial, sans-serif; color: #0f172a; margin: 24px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -171,19 +193,25 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
           <p style="font-size:12px;color:#475569;margin:4px 0 0;">Checklist del Responsable de Flota y Auditoría de Stock del Vehículo</p>
         </div>
         <div style="text-align:right;font-size:12px;">
-          <strong>Fecha:</strong> ${chk.date}<br/>
-          <strong>Urgencia:</strong> ${chk.overallUrgency}
+          <strong>Fecha:</strong> ${escapeHtml(chk.date)}<br/>
+          <strong>Urgencia:</strong> ${escapeHtml(chk.overallUrgency)}
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;background:#f8fafc;padding:12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:14px;font-size:12px;">
-        <div><strong>Unidad:</strong> ${amb?.code} (${amb?.plate})</div>
-        <div><strong>Vehículo:</strong> ${amb?.brand} ${amb?.model}</div>
+        <div><strong>Unidad:</strong> ${escapeHtml(amb?.code)} (${escapeHtml(
+          amb?.plate
+        )})</div>
+        <div><strong>Vehículo:</strong> ${escapeHtml(amb?.brand)} ${escapeHtml(
+          amb?.model
+        )}</div>
         <div><strong>Kilometraje:</strong> ${chk.mileageAtInspection.toLocaleString()} km</div>
       </div>
 
       <p style="font-size:12px;background:#f1f5f9;padding:10px;border-radius:6px;margin-top:12px;">
-        <strong>Observaciones Generales al Taller:</strong> ${chk.generalObservations}
+        <strong>Observaciones Generales al Taller:</strong> ${escapeHtml(
+          chk.generalObservations
+        )}
       </p>
 
       <h3 style="font-size:13px;margin-top:16px;margin-bottom:4px;">Stock de Piezas a Reponer en el Vehículo</h3>
@@ -220,20 +248,29 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
           .map(
             (p) => `
           <tr>
-            <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:12px;">${p.partName}</td>
-            <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:12px;font-family:monospace;">${p.sku}</td>
-            <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:12px;text-align:center;font-weight:bold;">${p.quantity} uds.</td>
+            <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:12px;">${escapeHtml(
+              p.partName
+            )}</td>
+            <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:12px;font-family:monospace;">${escapeHtml(
+              p.sku
+            )}</td>
+            <td style="padding:6px 8px;border:1px solid #cbd5e1;font-size:12px;text-align:center;font-weight:bold;">${escapeHtml(
+              p.quantity
+            )} uds.</td>
           </tr>`
           )
           .join('')
       : `<tr><td colspan="3" style="padding:8px;border:1px solid #cbd5e1;text-align:center;font-size:12px;">Sin repuestos registrados</td></tr>`;
 
+  const safePhotos = (wo.photos || []).filter((p) =>
+    p.startsWith('data:image/')
+  );
   const photosHtml =
-    wo.photos && wo.photos.length > 0
+    safePhotos.length > 0
       ? `<div style="margin-top:16px;">
-          <h3 style="font-size:13px;margin-bottom:8px;">Fotografías de la Avería / Intervención (${wo.photos.length})</h3>
+          <h3 style="font-size:13px;margin-bottom:8px;">Fotografías de la Avería / Intervención (${safePhotos.length})</h3>
           <div style="display:flex;flex-wrap:wrap;gap:10px;">
-            ${wo.photos
+            ${safePhotos
               .map(
                 (p) =>
                   `<img src="${p}" style="width:160px;height:115px;object-fit:cover;border:1px solid #94a3b8;border-radius:6px;" />`
@@ -243,12 +280,23 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
         </div>`
       : '';
 
+  const safeInspectorSig =
+    wo.inspectorSignature && wo.inspectorSignature.startsWith('data:image/')
+      ? wo.inspectorSignature
+      : '';
+  const safeMechanicSig =
+    wo.mechanicSignature && wo.mechanicSignature.startsWith('data:image/')
+      ? wo.mechanicSignature
+      : '';
+
   win.document.write(`
     <!doctype html>
     <html lang="es">
     <head>
       <meta charset="utf-8" />
-      <title>Orden de Trabajo ${wo.code} - ${amb?.plate || ''}</title>
+      <title>Orden de Trabajo ${escapeHtml(wo.code)} - ${escapeHtml(
+        amb?.plate
+      )}</title>
       <style>
         body { font-family: Arial, sans-serif; color: #0f172a; margin: 24px; }
         table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -263,33 +311,48 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px;">
         <div>
-          <h1 style="font-size:18px;margin:0;">ORDEN DE TRABAJO EN TALLER — ${wo.code}</h1>
+          <h1 style="font-size:18px;margin:0;">ORDEN DE TRABAJO EN TALLER — ${escapeHtml(
+            wo.code
+          )}</h1>
           <p style="font-size:12px;color:#475569;margin:4px 0 0;">AmbuFleet Mecánica • Gestión de Flota Sanitaria</p>
         </div>
         <div style="text-align:right;font-size:12px;">
-          <strong>Estado:</strong> ${wo.status}<br/>
-          <strong>Prioridad:</strong> ${wo.priority}<br/>
-          <strong>Fecha Entrada:</strong> ${wo.createdAt}
+          <strong>Estado:</strong> ${escapeHtml(wo.status)}<br/>
+          <strong>Prioridad:</strong> ${escapeHtml(wo.priority)}<br/>
+          <strong>Fecha Entrada:</strong> ${escapeHtml(wo.createdAt)}
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;background:#f8fafc;padding:12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:14px;font-size:12px;">
-        <div><strong>Unidad:</strong> ${amb?.code} (${amb?.plate})</div>
-        <div><strong>Modelo:</strong> ${amb?.brand} ${amb?.model}</div>
+        <div><strong>Unidad:</strong> ${escapeHtml(amb?.code)} (${escapeHtml(
+          amb?.plate
+        )})</div>
+        <div><strong>Modelo:</strong> ${escapeHtml(amb?.brand)} ${escapeHtml(
+          amb?.model
+        )}</div>
         <div><strong>Km Entrada:</strong> ${wo.mileageAtEntry.toLocaleString()} km</div>
-        <div><strong>Tipo:</strong> ${wo.type}</div>
-        <div><strong>Solicitado por:</strong> ${wo.reportedBy}</div>
-        <div><strong>Mecánico:</strong> ${wo.assignedMechanic}</div>
+        <div><strong>Tipo:</strong> ${escapeHtml(wo.type)}</div>
+        <div><strong>Solicitado por:</strong> ${escapeHtml(wo.reportedBy)}</div>
+        <div><strong>Mecánico:</strong> ${escapeHtml(wo.assignedMechanic)}</div>
       </div>
 
       <div style="margin-top:14px;font-size:12px;background:#f1f5f9;padding:12px;border-radius:6px;">
-        <p style="margin:0 0 6px;"><strong>Avería / Trabajo Solicitado:</strong> ${wo.title}</p>
-        <p style="margin:0;"><strong>Descripción de Síntomas:</strong> ${wo.description}</p>
+        <p style="margin:0 0 6px;"><strong>Avería / Trabajo Solicitado:</strong> ${escapeHtml(
+          wo.title
+        )}</p>
+        <p style="margin:0;"><strong>Descripción de Síntomas:</strong> ${escapeHtml(
+          wo.description
+        )}</p>
       </div>
 
       <div style="margin-top:14px;font-size:12px;background:#fff;border:1px solid #cbd5e1;padding:12px;border-radius:6px;">
-        <p style="margin:0 0 6px;"><strong>Informe de Intervención del Mecánico (${wo.laborHours} horas invertidas):</strong></p>
-        <p style="margin:0;">${wo.mechanicDiagnosis || 'Pendiente de completar informe técnico.'}</p>
+        <p style="margin:0 0 6px;"><strong>Informe de Intervención del Mecánico (${escapeHtml(
+          wo.laborHours
+        )} horas invertidas):</strong></p>
+        <p style="margin:0;">${
+          escapeHtml(wo.mechanicDiagnosis) ||
+          'Pendiente de completar informe técnico.'
+        }</p>
       </div>
 
       <h3 style="font-size:13px;margin-top:16px;margin-bottom:4px;">Repuestos Instalados del Almacén</h3>
@@ -308,18 +371,22 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
 
       <div style="margin-top:24px;border-top:1px solid #cbd5e1;padding-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
         <div style="border:1px solid #cbd5e1;padding:10px;border-radius:8px;">
-          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Entrega a Taller (Resp. Flota — ${wo.reportedBy}):</p>
+          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Entrega a Taller (Resp. Flota — ${escapeHtml(
+            wo.reportedBy
+          )}):</p>
           ${
-            wo.inspectorSignature
-              ? `<img src="${wo.inspectorSignature}" style="height:60px;object-contain;" />`
+            safeInspectorSig
+              ? `<img src="${safeInspectorSig}" style="height:60px;object-contain;" />`
               : `<div style="height:60px;border-bottom:1px dashed #94a3b8;"></div>`
           }
         </div>
         <div style="border:1px solid #cbd5e1;padding:10px;border-radius:8px;">
-          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Alta Mecánica (Jefe de Taller — ${wo.assignedMechanic}):</p>
+          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Alta Mecánica (Jefe de Taller — ${escapeHtml(
+            wo.assignedMechanic
+          )}):</p>
           ${
-            wo.mechanicSignature
-              ? `<img src="${wo.mechanicSignature}" style="height:60px;object-contain;" />`
+            safeMechanicSig
+              ? `<img src="${safeMechanicSig}" style="height:60px;object-contain;" />`
               : `<div style="height:60px;border-bottom:1px dashed #94a3b8;"></div>`
           }
         </div>

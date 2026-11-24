@@ -43,7 +43,7 @@ interface ChecklistViewProps {
   onCreateWorkOrderFromChecklist: (checklist: FleetChecklist) => void;
 }
 
-// Utilidad para comprimir fotos tomadas con la cámara del móvil/tablet
+// Utilidad para comprimir fotos tomadas con la cámara del móvil/tablet (optimizada para cuota de LocalStorage)
 const compressImageFile = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -51,7 +51,7 @@ const compressImageFile = (file: File): Promise<string> => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 800;
+        const maxDim = 640;
         let width = img.width;
         let height = img.height;
         if (width > height && width > maxDim) {
@@ -66,7 +66,7 @@ const compressImageFile = (file: File): Promise<string> => {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.72));
+          resolve(canvas.toDataURL('image/jpeg', 0.62));
         } else {
           resolve(ev.target?.result as string);
         }
@@ -190,7 +190,7 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
     if (!selectedAmb) return;
 
     const missingParts: MissingVehiclePartReport[] = selectedAmb.onboardParts
-      .map((part) => {
+      .map((part): MissingVehiclePartReport | null => {
         const verifiedQty =
           onboardCounts[part.partId] !== undefined
             ? onboardCounts[part.partId]
@@ -201,7 +201,7 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
             partId: part.partId,
             partName: part.partName,
             missingQty: diff,
-            actionRequired: 'Reponer en vehículo' as const,
+            actionRequired: 'Reponer en vehículo',
           };
         }
         return null;

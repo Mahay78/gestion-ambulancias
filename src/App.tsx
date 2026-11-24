@@ -50,71 +50,90 @@ type ActiveTab =
 
 const STORAGE_KEY = 'ambufleet_mechanics_v1';
 
+const safeLoadFromStorage = <T,>(key: string, fallback: T): T => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? (JSON.parse(saved) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const safeSaveToStorage = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    console.warn(
+      `[AmbuFleet] Cuota de almacenamiento local alcanzada al guardar ${key}. Descarga una copia de seguridad en JSON.`
+    );
+  }
+};
+
+const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
+  const maxNum = existingOrders.reduce((max, wo) => {
+    const match = wo.code.match(/(\d+)$/);
+    const num = match ? parseInt(match[1], 10) : 0;
+    return num > max ? num : max;
+  }, 0);
+  return `OT-2026-${String(maxNum + 1).padStart(3, '0')}`;
+};
+
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [showBackupModal, setShowBackupModal] = useState(false);
 
-  const [ambulances, setAmbulances] = useState<Ambulance[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_ambulances`);
-    return saved ? JSON.parse(saved) : INITIAL_AMBULANCES;
-  });
+  const [ambulances, setAmbulances] = useState<Ambulance[]>(() =>
+    safeLoadFromStorage(`${STORAGE_KEY}_ambulances`, INITIAL_AMBULANCES)
+  );
 
   const [preventiveSchedules, setPreventiveSchedules] = useState<
     PreventiveSchedule[]
-  >(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_preventive`);
-    return saved ? JSON.parse(saved) : INITIAL_PREVENTIVE_SCHEDULES;
-  });
+  >(() =>
+    safeLoadFromStorage(
+      `${STORAGE_KEY}_preventive`,
+      INITIAL_PREVENTIVE_SCHEDULES
+    )
+  );
 
-  const [checklists, setChecklists] = useState<FleetChecklist[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_checklists`);
-    return saved ? JSON.parse(saved) : INITIAL_CHECKLISTS;
-  });
+  const [checklists, setChecklists] = useState<FleetChecklist[]>(() =>
+    safeLoadFromStorage(`${STORAGE_KEY}_checklists`, INITIAL_CHECKLISTS)
+  );
 
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_workorders`);
-    return saved ? JSON.parse(saved) : INITIAL_WORK_ORDERS;
-  });
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() =>
+    safeLoadFromStorage(`${STORAGE_KEY}_workorders`, INITIAL_WORK_ORDERS)
+  );
 
-  const [spareParts, setSpareParts] = useState<SparePart[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_parts`);
-    return saved ? JSON.parse(saved) : INITIAL_SPARE_PARTS;
-  });
+  const [spareParts, setSpareParts] = useState<SparePart[]>(() =>
+    safeLoadFromStorage(`${STORAGE_KEY}_parts`, INITIAL_SPARE_PARTS)
+  );
 
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_movements`);
-    return saved ? JSON.parse(saved) : INITIAL_STOCK_MOVEMENTS;
-  });
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() =>
+    safeLoadFromStorage(`${STORAGE_KEY}_movements`, INITIAL_STOCK_MOVEMENTS)
+  );
 
-  // Persistencia automática en LocalStorage
+  // Persistencia automática y segura en LocalStorage
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_ambulances`, JSON.stringify(ambulances));
+    safeSaveToStorage(`${STORAGE_KEY}_ambulances`, ambulances);
   }, [ambulances]);
 
   useEffect(() => {
-    localStorage.setItem(
-      `${STORAGE_KEY}_preventive`,
-      JSON.stringify(preventiveSchedules)
-    );
+    safeSaveToStorage(`${STORAGE_KEY}_preventive`, preventiveSchedules);
   }, [preventiveSchedules]);
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_checklists`, JSON.stringify(checklists));
+    safeSaveToStorage(`${STORAGE_KEY}_checklists`, checklists);
   }, [checklists]);
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_workorders`, JSON.stringify(workOrders));
+    safeSaveToStorage(`${STORAGE_KEY}_workorders`, workOrders);
   }, [workOrders]);
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_parts`, JSON.stringify(spareParts));
+    safeSaveToStorage(`${STORAGE_KEY}_parts`, spareParts);
   }, [spareParts]);
 
   useEffect(() => {
-    localStorage.setItem(
-      `${STORAGE_KEY}_movements`,
-      JSON.stringify(stockMovements)
-    );
+    safeSaveToStorage(`${STORAGE_KEY}_movements`, stockMovements);
   }, [stockMovements]);
 
   const recordStockMovement = (
@@ -154,6 +173,8 @@ export function App() {
   const handleDeleteAmbulance = (id: string) => {
     setAmbulances((prev) => prev.filter((a) => a.id !== id));
     setPreventiveSchedules((prev) => prev.filter((p) => p.ambulanceId !== id));
+    setChecklists((prev) => prev.filter((c) => c.ambulanceId !== id));
+    setWorkOrders((prev) => prev.filter((w) => w.ambulanceId !== id));
   };
 
   const handleUpdateAmbulanceStatus = (id: string, status: AmbulanceStatus) => {
@@ -266,7 +287,7 @@ export function App() {
     );
   };
 
-  // Reponer pieza de la dotación a bordo de una ambulancia descontando del almacén
+  // Reponer pieza de la dotación a bordo de una ambulancia descontando del almacén (validando stock disponible)
   const handleRestockVehiclePart = (ambulanceId: string, partId: string) => {
     const amb = ambulances.find((a) => a.id === ambulanceId);
     if (!amb) return;
@@ -276,20 +297,32 @@ export function App() {
     if (needed <= 0) return;
 
     const part = spareParts.find((sp) => sp.id === partId);
-    if (part) {
-      recordStockMovement(
-        part,
-        'Reposición a Bordo Vehículo',
-        -needed,
-        `Dotación a bordo ${amb.code} (${amb.plate})`,
-        'Taller / Almacén'
+    if (!part || part.stockQuantity <= 0) {
+      alert(
+        `No hay unidades disponibles en el almacén de taller para "${
+          part?.name || onboard.partName
+        }". Registra primero una entrada de mercancía en Inventario.`
       );
+      return;
     }
+
+    const actualToRestock = Math.min(needed, part.stockQuantity);
+
+    recordStockMovement(
+      part,
+      'Reposición a Bordo Vehículo',
+      -actualToRestock,
+      `Dotación a bordo ${amb.code} (${amb.plate})`,
+      'Taller / Almacén'
+    );
 
     setSpareParts((prev) =>
       prev.map((sp) =>
         sp.id === partId
-          ? { ...sp, stockQuantity: Math.max(0, sp.stockQuantity - needed) }
+          ? {
+              ...sp,
+              stockQuantity: Math.max(0, sp.stockQuantity - actualToRestock),
+            }
           : sp
       )
     );
@@ -300,7 +333,9 @@ export function App() {
           ? {
               ...a,
               onboardParts: a.onboardParts.map((p) =>
-                p.partId === partId ? { ...p, currentQty: p.requiredQty } : p
+                p.partId === partId
+                  ? { ...p, currentQty: p.currentQty + actualToRestock }
+                  : p
               ),
             }
           : a
@@ -347,7 +382,7 @@ export function App() {
 
     const newWo: WorkOrder = {
       id: `wo-${Date.now()}`,
-      code: `OT-2026-00${workOrders.length + 1}`,
+      code: getNextWorkOrderCode(workOrders),
       ambulanceId: amb.id,
       type: 'Preventivo',
       priority: 'Alta',
@@ -390,7 +425,7 @@ export function App() {
     const newWoId = `wo-${Date.now()}`;
     const newWo: WorkOrder = {
       id: newWoId,
-      code: `OT-2026-00${workOrders.length + 1}`,
+      code: getNextWorkOrderCode(workOrders),
       ambulanceId: amb.id,
       type: 'Inspección Responsable Flota',
       priority:
@@ -479,7 +514,7 @@ export function App() {
     const newWo: WorkOrder = {
       ...woData,
       id: `wo-${Date.now()}`,
-      code: `OT-2026-00${workOrders.length + 1}`,
+      code: getNextWorkOrderCode(workOrders),
     };
     setWorkOrders((prev) => [newWo, ...prev]);
     handleUpdateAmbulanceStatus(woData.ambulanceId, 'En Taller');
@@ -527,6 +562,12 @@ export function App() {
     const part = spareParts.find((p) => p.id === partId);
     const wo = workOrders.find((w) => w.id === woId);
     if (!part || !wo) return;
+    if (part.stockQuantity < quantity) {
+      alert(
+        `Stock insuficiente en almacén para "${part.name}". Disponible: ${part.stockQuantity} uds.`
+      );
+      return;
+    }
     const amb = ambulances.find((a) => a.id === wo.ambulanceId);
 
     recordStockMovement(
@@ -560,6 +601,43 @@ export function App() {
                   unitCost: part.unitCost,
                 },
               ],
+            }
+          : item
+      )
+    );
+  };
+
+  const handleRemovePartFromWorkOrder = (woId: string, partIndex: number) => {
+    const wo = workOrders.find((w) => w.id === woId);
+    if (!wo) return;
+    const removedEntry = wo.partsUsed[partIndex];
+    if (!removedEntry) return;
+
+    const part = spareParts.find((p) => p.id === removedEntry.partId);
+    const amb = ambulances.find((a) => a.id === wo.ambulanceId);
+    if (part) {
+      recordStockMovement(
+        part,
+        'Ajuste Manual Almacén',
+        removedEntry.quantity,
+        `Devolución desde ${wo.code} (${amb?.code || ''})`,
+        wo.assignedMechanic
+      );
+      setSpareParts((prev) =>
+        prev.map((p) =>
+          p.id === part.id
+            ? { ...p, stockQuantity: p.stockQuantity + removedEntry.quantity }
+            : p
+        )
+      );
+    }
+
+    setWorkOrders((prev) =>
+      prev.map((item) =>
+        item.id === woId
+          ? {
+              ...item,
+              partsUsed: item.partsUsed.filter((_, idx) => idx !== partIndex),
             }
           : item
       )
@@ -935,6 +1013,7 @@ export function App() {
             onCreateWorkOrder={handleCreateWorkOrder}
             onUpdateWorkOrderStatus={handleUpdateWorkOrderStatus}
             onAddPartToWorkOrder={handleAddPartToWorkOrder}
+            onRemovePartFromWorkOrder={handleRemovePartFromWorkOrder}
             onUpdateWorkOrderDetails={handleUpdateWorkOrderDetails}
             onUpdateWorkOrderSignatureAndPhotos={
               handleUpdateWorkOrderSignatureAndPhotos

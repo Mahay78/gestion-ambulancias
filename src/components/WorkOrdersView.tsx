@@ -21,6 +21,7 @@ import {
   PenTool,
   MessageCircle,
   Printer,
+  Trash2,
 } from 'lucide-react';
 
 interface WorkOrdersViewProps {
@@ -30,6 +31,7 @@ interface WorkOrdersViewProps {
   onCreateWorkOrder: (wo: Omit<WorkOrder, 'id' | 'code'>) => void;
   onUpdateWorkOrderStatus: (woId: string, status: WorkOrderStatus) => void;
   onAddPartToWorkOrder: (woId: string, partId: string, quantity: number) => void;
+  onRemovePartFromWorkOrder: (woId: string, partIndex: number) => void;
   onUpdateWorkOrderDetails: (
     woId: string,
     laborHours: number,
@@ -49,6 +51,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   onCreateWorkOrder,
   onUpdateWorkOrderStatus,
   onAddPartToWorkOrder,
+  onRemovePartFromWorkOrder,
   onUpdateWorkOrderDetails,
   onUpdateWorkOrderSignatureAndPhotos,
 }) => {
@@ -473,13 +476,16 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                               <th className="py-2.5 px-3 text-right">
                                 Cantidad Instalada
                               </th>
+                              {selectedWo.status !== 'Finalizada' && (
+                                <th className="py-2.5 px-3 text-right">Quitar</th>
+                              )}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200">
                             {selectedWo.partsUsed.length === 0 ? (
                               <tr>
                                 <td
-                                  colSpan={3}
+                                  colSpan={selectedWo.status !== 'Finalizada' ? 4 : 3}
                                   className="py-4 text-center text-slate-400"
                                 >
                                   No se han asignado repuestos a esta orden
@@ -498,6 +504,23 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                   <td className="py-2.5 px-3 text-right font-bold text-slate-900">
                                     {pu.quantity} uds.
                                   </td>
+                                  {selectedWo.status !== 'Finalizada' && (
+                                    <td className="py-2.5 px-3 text-right">
+                                      <button
+                                        type="button"
+                                        title="Quitar repuesto y devolver al stock del almacén"
+                                        onClick={() =>
+                                          onRemovePartFromWorkOrder(
+                                            selectedWo.id,
+                                            idx
+                                          )
+                                        }
+                                        className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                               ))
                             )}
