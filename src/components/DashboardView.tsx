@@ -442,8 +442,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td className="py-3 px-4 font-semibold text-slate-800">
                       {amb.mileage.toLocaleString()} km
                     </td>
-                    <td className="py-3 px-4 text-xs font-medium text-slate-700">
-                      {amb.itvExpiry}
+                    <td className="py-3 px-4 text-xs">
+                      {(() => {
+                        const diffItv = Math.ceil(
+                          (new Date(amb.itvExpiry).getTime() -
+                            new Date(today).getTime()) /
+                            (1000 * 3600 * 24)
+                        );
+                        const diffSan = Math.ceil(
+                          (new Date(amb.sanitaryCertExpiry).getTime() -
+                            new Date(today).getTime()) /
+                            (1000 * 3600 * 24)
+                        );
+                        const minDiff = Math.min(diffItv, diffSan);
+                        const badgeClass =
+                          minDiff < 0
+                            ? 'bg-rose-100 text-rose-800 border-rose-300'
+                            : minDiff <= 30
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                        const labelText =
+                          diffItv < 0
+                            ? `ITV Vencida (${Math.abs(diffItv)}d)`
+                            : diffItv <= 30
+                            ? `ITV en ${diffItv} días`
+                            : `ITV: ${amb.itvExpiry}`;
+                        return (
+                          <div className="space-y-0.5">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded border font-bold text-[11px] ${badgeClass}`}
+                            >
+                              {labelText}
+                            </span>
+                            <span className="block text-[11px] text-slate-500">
+                              Sanitario: {amb.sanitaryCertExpiry}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4">
                       {missingPartsCount === 0 ? (

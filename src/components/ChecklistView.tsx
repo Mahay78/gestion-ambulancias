@@ -9,6 +9,11 @@ import {
 import { DEFAULT_CHECKLIST_TEMPLATE } from '../initialData';
 import { SignaturePad } from './SignaturePad';
 import { PlateScannerModal } from './PlateScannerModal';
+import { VoiceDictationButton } from './VoiceDictationButton';
+import {
+  shareChecklistViaWhatsApp,
+  printChecklistReport,
+} from '../utils/shareAndPrint';
 import {
   ClipboardCheck,
   Wrench,
@@ -23,6 +28,8 @@ import {
   ScanLine,
   Trash2,
   Image as ImageIcon,
+  MessageCircle,
+  Printer,
 } from 'lucide-react';
 
 interface ChecklistViewProps {
@@ -584,7 +591,7 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                             </label>
                           </div>
 
-                          <div className="md:w-4/12">
+                          <div className="md:w-4/12 flex items-center gap-1.5">
                             <input
                               type="text"
                               placeholder="Nota o síntoma para el mecánico..."
@@ -593,6 +600,15 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                                 updateItemComment(item.id, e.target.value)
                               }
                               className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs"
+                            />
+                            <VoiceDictationButton
+                              label="Voz"
+                              onTranscript={(text) =>
+                                updateItemComment(
+                                  item.id,
+                                  item.comment ? `${item.comment}. ${text}` : text
+                                )
+                              }
                             />
                           </div>
                         </div>
@@ -686,13 +702,28 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
               )}
             </div>
 
-            <textarea
-              rows={3}
-              placeholder="Escribe aquí las instrucciones detalladas para el Jefe de Taller (ruidos detectados, comportamiento en ruta, urgencia de disponibilidad de la ambulancia, etc.)..."
-              value={generalObservations}
-              onChange={(e) => setGeneralObservations(e.target.value)}
-              className="w-full p-3 rounded-xl border border-slate-300 text-xs"
-            />
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-bold text-slate-700">
+                  Observaciones Generales e Instrucciones para el Jefe de Taller
+                </label>
+                <VoiceDictationButton
+                  label="Dictar Observaciones por Voz"
+                  onTranscript={(text) =>
+                    setGeneralObservations((prev) =>
+                      prev ? `${prev}. ${text}` : text
+                    )
+                  }
+                />
+              </div>
+              <textarea
+                rows={3}
+                placeholder="Escribe o dicta por voz las instrucciones detalladas para el Jefe de Taller (ruidos detectados, comportamiento en ruta, urgencia de disponibilidad de la ambulancia, etc.)..."
+                value={generalObservations}
+                onChange={(e) => setGeneralObservations(e.target.value)}
+                className="w-full p-3 rounded-xl border border-slate-300 text-xs"
+              />
+            </div>
 
             {/* Firma Digital en Pantalla del Responsable de Flota */}
             <SignaturePad
@@ -764,14 +795,30 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                     </p>
                   </div>
 
-                  <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => shareChecklistViaWhatsApp(chk, amb)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      WhatsApp Taller
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => printChecklistReport(chk, amb)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      PDF / Imprimir
+                    </button>
                     {chk.workshopStatus === 'Pendiente de Revisión Taller' ? (
                       <button
                         onClick={() => onCreateWorkOrderFromChecklist(chk)}
-                        className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
                       >
                         <Wrench className="w-3.5 h-3.5" />
-                        Convertir en Orden de Taller (OT)
+                        Convertir en OT
                       </button>
                     ) : (
                       <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold inline-flex items-center gap-1.5">

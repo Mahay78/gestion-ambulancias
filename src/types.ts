@@ -27,7 +27,7 @@ export interface Ambulance {
   lastServiceDate: string;
   lastServiceMileage: number;
   notes: string;
-  onboardParts: VehicleOnboardPart[]; // Stock de piezas/consumibles a bordo o asignados al vehículo
+  onboardParts: VehicleOnboardPart[];
 }
 
 export type PreventiveCategory =
@@ -63,7 +63,7 @@ export interface ChecklistItem {
   label: string;
   status: ChecklistItemStatus;
   comment: string;
-  photoUrl?: string; // Foto adjunta del punto de avería
+  photoUrl?: string;
 }
 
 export interface MissingVehiclePartReport {
@@ -77,7 +77,7 @@ export interface FleetChecklist {
   id: string;
   ambulanceId: string;
   date: string;
-  inspectorName: string; // Responsable de flota
+  inspectorName: string;
   mileageAtInspection: number;
   overallUrgency: 'Normal' | 'Prioritaria' | 'Inmovilización Inmediata';
   items: ChecklistItem[];
@@ -85,8 +85,8 @@ export interface FleetChecklist {
   generalObservations: string;
   workshopStatus: 'Pendiente de Revisión Taller' | 'Orden de Trabajo Creada' | 'Archivada / OK';
   linkedWorkOrderId?: string;
-  photos?: string[]; // Galería de fotos adjuntas de la inspección
-  inspectorSignature?: string; // Firma digital en base64 del responsable de flota
+  photos?: string[];
+  inspectorSignature?: string;
 }
 
 export type WorkOrderStatus = 'Pendiente' | 'En Diagnóstico' | 'Esperando Repuestos' | 'En Reparación' | 'Finalizada';
@@ -103,7 +103,7 @@ export interface WorkOrderPartUsed {
 
 export interface WorkOrder {
   id: string;
-  code: string; // ej. OT-2026-001
+  code: string;
   ambulanceId: string;
   type: WorkOrderType;
   priority: WorkOrderPriority;
@@ -120,9 +120,9 @@ export interface WorkOrder {
   partsUsed: WorkOrderPartUsed[];
   mechanicDiagnosis: string;
   sourceChecklistId?: string;
-  photos?: string[]; // Fotos de la avería / reparación
-  inspectorSignature?: string; // Firma de entrega del responsable de flota
-  mechanicSignature?: string; // Firma de alta mecánica del jefe de taller
+  photos?: string[];
+  inspectorSignature?: string;
+  mechanicSignature?: string;
 }
 
 export type PartCategory =
@@ -146,4 +146,22 @@ export interface SparePart {
   locationInWorkshop: string;
   supplier: string;
   isVehicleOnboardStandard: boolean;
+}
+
+export type StockMovementType =
+  | 'Salida a Orden de Taller'
+  | 'Reposición a Bordo Vehículo'
+  | 'Entrada Pedido Proveedor'
+  | 'Ajuste Manual Almacén';
+
+export interface StockMovement {
+  id: string;
+  date: string;
+  partId: string;
+  partName: string;
+  sku: string;
+  type: StockMovementType;
+  quantityChange: number; // negativo para salidas, positivo para entradas
+  targetReference: string; // ej. "AMB-02 (9104-KTR) • OT-2026-001"
+  performedBy: string;
 }

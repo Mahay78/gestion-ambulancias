@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { Ambulance, PartCategory, SparePart } from '../types';
+import {
+  Ambulance,
+  PartCategory,
+  SparePart,
+  StockMovement,
+} from '../types';
 import {
   Package,
   Plus,
@@ -8,24 +13,34 @@ import {
   Truck,
   RefreshCw,
   Search,
+  ShoppingCart,
+  History,
+  MessageCircle,
+  PackageCheck,
 } from 'lucide-react';
 
 interface PartsInventoryViewProps {
   spareParts: SparePart[];
   ambulances: Ambulance[];
+  stockMovements: StockMovement[];
   onAddSparePart: (part: Omit<SparePart, 'id'>) => void;
   onUpdatePartStock: (partId: string, delta: number) => void;
   onRestockVehiclePart: (ambulanceId: string, partId: string) => void;
+  onReceiveSupplierOrder: (partId: string, quantityToAdd: number) => void;
 }
 
 export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
   spareParts,
   ambulances,
+  stockMovements,
   onAddSparePart,
   onUpdatePartStock,
   onRestockVehiclePart,
+  onReceiveSupplierOrder,
 }) => {
-  const [subTab, setSubTab] = useState<'warehouse' | 'vehicles'>('warehouse');
+  const [subTab, setSubTab] = useState<
+    'warehouse' | 'vehicles' | 'orders' | 'movements'
+  >('warehouse');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -60,6 +75,61 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
     0
   );
 
+  // Calcular Lista Automática de Pedido a Proveedores (3.1)
+  // Incluye piezas con stockQuantity <= minStockAlert O que falten a bordo de las ambulancias
+  const supplierOrderLines = spareParts
+    .map((part) => {
+      const missingAcrossVehicles = ambulances.reduce((sum, amb) => {
+        const onboard = amb.onboardParts.find((op) => op.partId === part.id);
+        if (!onboard) return sum;
+        return sum + Math.max(0, onboard.requiredQty - onboard.currentQty);
+      }, 0);
+
+      const warehouseShortfall = Math.max(
+        0,
+        part.minStockAlert * 2 - part.stockQuantity
+      );
+      const needsOrder =
+        part.stockQuantity <= part.minStockAlert ||
+        missingAcrossVehicles > part.stockQuantity;
+
+      const suggestedOrderQty = Math.max(
+        4,
+        warehouseShortfall + missingAcrossVehicles
+      );
+
+      return {
+        part,
+        missingAcrossVehicles,
+        needsOrder,
+        suggestedOrderQty,
+      };
+    })
+    .filter((item) => item.needsOrder);
+
+  const sendSupplierOrderViaWhatsApp = () => {
+    if (supplierOrderLines.length === 0) return;
+    const lines = supplierOrderLines
+      .map(
+        (l) =>
+          `• *${l.part.name}* (${l.part.sku}) → Pedir *${l.suggestedOrderQty} uds.* [Proveedor: ${l.part.supplier} | Stock actual: ${l.part.stockQuantity}]`
+      )
+      .join('\n');
+
+    const text = [
+      `📦 *SOLICITUD DE PEDIDO DE REPUESTOS — AMBUFLEET TALLER*`,
+      `Fecha: ${new Date().toISOString().split('T')[0]}`,
+      ``,
+      lines,
+    ].join('\n');
+
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  };
+
   const handleCreatePart = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPart.name.trim() || !newPart.sku.trim()) return;
@@ -83,36 +153,61 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Cabecera de Inventario y Selector de Vista: Almacén Taller vs Stock por Vehículo */}
+      {/* Cabecera de Inventario y Selector de 4 Sub-Pestañas */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setSubTab('warehouse')}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
               subTab === 'warehouse'
                 ? 'bg-slate-900 text-white'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             <Package className="w-4 h-4" />
-            Almacén General de Taller ({spareParts.length} referencias)
+            Almacén Taller ({spareParts.length})
           </button>
+
           <button
             onClick={() => setSubTab('vehicles')}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
               subTab === 'vehicles'
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             <Truck className="w-4 h-4" />
-            Matriz de Stock de Piezas por Vehículo ({ambulances.length} ambulancias)
+            Stock por Vehículo ({ambulances.length})
+          </button>
+
+          <button
+            onClick={() => setSubTab('orders')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+              subTab === 'orders'
+                ? 'bg-rose-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4" />
+            Pedido a Proveedores ({supplierOrderLines.length})
+          </button>
+
+          <button
+            onClick={() => setSubTab('movements')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+              subTab === 'movements'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            Historial de Movimientos ({stockMovements.length})
           </button>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="text-right text-xs">
-            <span className="text-slate-400 block">Unidades Totales Almacén</span>
+            <span className="text-slate-400 block">Unidades en Almacén</span>
             <span className="text-sm font-extrabold text-slate-900">
               {totalUnitsInStock} uds.
             </span>
@@ -127,9 +222,9 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
         </div>
       </div>
 
-      {subTab === 'warehouse' ? (
+      {/* Sub-pestaña 1: Almacén General de Taller */}
+      {subTab === 'warehouse' && (
         <div className="space-y-4">
-          {/* Buscador y filtro por categoría */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200">
             <div className="relative flex-1 min-w-[240px]">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -166,7 +261,6 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             </div>
           </div>
 
-          {/* Tabla de Repuestos del Taller */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -264,8 +358,10 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             </div>
           </div>
         </div>
-      ) : (
-        /* Vista 2: Matriz de Stock de Piezas por Vehículo */
+      )}
+
+      {/* Sub-pestaña 2: Matriz de Stock de Piezas por Vehículo */}
+      {subTab === 'vehicles' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {ambulances.map((amb) => {
             const missingTotal = amb.onboardParts.reduce(
@@ -296,8 +392,8 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                     </span>
                   ) : (
                     <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-xs font-bold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" /> Faltan {missingTotal}{' '}
-                      piezas
+                      <AlertTriangle className="w-3.5 h-3.5" /> Faltan{' '}
+                      {missingTotal} piezas
                     </span>
                   )}
                 </div>
@@ -324,7 +420,9 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                           <span className="text-emerald-600 font-bold">OK</span>
                         ) : (
                           <button
-                            onClick={() => onRestockVehiclePart(amb.id, item.partId)}
+                            onClick={() =>
+                              onRestockVehiclePart(amb.id, item.partId)
+                            }
                             className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1"
                           >
                             <RefreshCw className="w-3 h-3" /> Reponer desde Taller
@@ -337,6 +435,189 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Sub-pestaña 3: Lista Automática de Pedido a Proveedores (3.1) */}
+      {subTab === 'orders' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-rose-600" />
+                Propuesta Automática de Pedido a Proveedores
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Calculada cruzando las referencias bajo mínimo en almacén más las
+                piezas que faltan a bordo de las ambulancias.
+              </p>
+            </div>
+
+            {supplierOrderLines.length > 0 && (
+              <button
+                type="button"
+                onClick={sendSupplierOrderViaWhatsApp}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-xs"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Enviar Lista de Pedido por WhatsApp
+              </button>
+            )}
+          </div>
+
+          {supplierOrderLines.length === 0 ? (
+            <div className="p-10 text-center text-xs text-slate-500">
+              Todas las referencias superan el stock mínimo. No hay pedidos
+              pendientes.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-500 font-bold uppercase">
+                    <th className="py-3 px-4">Proveedor</th>
+                    <th className="py-3 px-4">Repuesto / SKU</th>
+                    <th className="py-3 px-4 text-center">Stock Almacén</th>
+                    <th className="py-3 px-4 text-center">
+                      Faltan en Ambulancias
+                    </th>
+                    <th className="py-3 px-4 text-center">Cantidad a Pedir</th>
+                    <th className="py-3 px-4 text-right">Recepción Mercancía</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {supplierOrderLines.map(
+                    ({
+                      part,
+                      missingAcrossVehicles,
+                      suggestedOrderQty,
+                    }) => (
+                      <tr key={part.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-bold text-slate-800">
+                          {part.supplier}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-slate-900 block">
+                            {part.name}
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-500">
+                            {part.sku} • {part.locationInWorkshop}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold">
+                            {part.stockQuantity} / mín {part.minStockAlert}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-semibold text-purple-700">
+                          {missingAcrossVehicles > 0
+                            ? `${missingAcrossVehicles} uds.`
+                            : '-'}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-3 py-1 rounded-lg bg-slate-900 text-white font-extrabold">
+                            +{suggestedOrderQty} uds.
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onReceiveSupplierOrder(part.id, suggestedOrderQty)
+                            }
+                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold inline-flex items-center gap-1.5"
+                          >
+                            <PackageCheck className="w-3.5 h-3.5" />
+                            Recibir en Almacén
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sub-pestaña 4: Historial de Movimientos de Stock / Trazabilidad (3.2) */}
+      {subTab === 'movements' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 bg-slate-50 border-b border-slate-200">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <History className="w-4 h-4 text-blue-600" />
+              Historial de Movimientos y Trazabilidad de Piezas
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Registro automático de todas las salidas de repuestos hacia Órdenes
+              de Trabajo, reposiciones a bordo de ambulancias y entradas de
+              almacén.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-500 font-bold uppercase">
+                  <th className="py-3 px-4">Fecha / Hora</th>
+                  <th className="py-3 px-4">Tipo de Movimiento</th>
+                  <th className="py-3 px-4">Pieza / SKU</th>
+                  <th className="py-3 px-4 text-center">Variación</th>
+                  <th className="py-3 px-4">Ambulancia / Destino</th>
+                  <th className="py-3 px-4">Responsable</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {stockMovements.map((mov) => (
+                  <tr key={mov.id} className="hover:bg-slate-50">
+                    <td className="py-3 px-4 font-mono text-slate-600">
+                      {mov.date}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
+                          mov.quantityChange < 0
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {mov.type}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-bold text-slate-900">
+                        {mov.partName}
+                      </span>
+                      <span className="block font-mono text-[11px] text-slate-400">
+                        {mov.sku}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span
+                        className={`font-extrabold text-sm ${
+                          mov.quantityChange < 0
+                            ? 'text-rose-600'
+                            : 'text-emerald-600'
+                        }`}
+                      >
+                        {mov.quantityChange > 0
+                          ? `+${mov.quantityChange}`
+                          : mov.quantityChange}{' '}
+                        uds.
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-slate-800">
+                      {mov.targetReference}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {mov.performedBy}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -358,7 +639,9 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                     required
                     placeholder="FRN-DSC-09"
                     value={newPart.sku}
-                    onChange={(e) => setNewPart({ ...newPart, sku: e.target.value })}
+                    onChange={(e) =>
+                      setNewPart({ ...newPart, sku: e.target.value })
+                    }
                     className="w-full px-3 py-2 rounded-lg border border-slate-300"
                   />
                 </div>
@@ -404,7 +687,9 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                   type="text"
                   required
                   value={newPart.name}
-                  onChange={(e) => setNewPart({ ...newPart, name: e.target.value })}
+                  onChange={(e) =>
+                    setNewPart({ ...newPart, name: e.target.value })
+                  }
                   className="w-full px-3 py-2 rounded-lg border border-slate-300"
                 />
               </div>

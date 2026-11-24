@@ -5,6 +5,8 @@ import {
   FleetChecklist,
   PreventiveSchedule,
   SparePart,
+  StockMovement,
+  StockMovementType,
   WorkOrder,
   WorkOrderStatus,
 } from './types';
@@ -13,6 +15,7 @@ import {
   INITIAL_CHECKLISTS,
   INITIAL_PREVENTIVE_SCHEDULES,
   INITIAL_SPARE_PARTS,
+  INITIAL_STOCK_MOVEMENTS,
   INITIAL_WORK_ORDERS,
 } from './initialData';
 import { DashboardView } from './components/DashboardView';
@@ -21,6 +24,7 @@ import { PreventiveView } from './components/PreventiveView';
 import { ChecklistView } from './components/ChecklistView';
 import { WorkOrdersView } from './components/WorkOrdersView';
 import { PartsInventoryView } from './components/PartsInventoryView';
+import { exportFleetAndStockToCSV } from './utils/shareAndPrint';
 import {
   LayoutDashboard,
   Truck,
@@ -30,6 +34,10 @@ import {
   Package,
   RotateCcw,
   Activity,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  X,
 } from 'lucide-react';
 
 type ActiveTab =
@@ -44,6 +52,7 @@ const STORAGE_KEY = 'ambufleet_mechanics_v1';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [showBackupModal, setShowBackupModal] = useState(false);
 
   const [ambulances, setAmbulances] = useState<Ambulance[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_ambulances`);
@@ -72,6 +81,11 @@ export function App() {
     return saved ? JSON.parse(saved) : INITIAL_SPARE_PARTS;
   });
 
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_movements`);
+    return saved ? JSON.parse(saved) : INITIAL_STOCK_MOVEMENTS;
+  });
+
   // Persistencia automática en LocalStorage
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY}_ambulances`, JSON.stringify(ambulances));
@@ -96,6 +110,38 @@ export function App() {
     localStorage.setItem(`${STORAGE_KEY}_parts`, JSON.stringify(spareParts));
   }, [spareParts]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      `${STORAGE_KEY}_movements`,
+      JSON.stringify(stockMovements)
+    );
+  }, [stockMovements]);
+
+  const recordStockMovement = (
+    part: SparePart,
+    type: StockMovementType,
+    quantityChange: number,
+    targetReference: string,
+    performedBy: string
+  ) => {
+    const now = new Date();
+    const formattedDate = `${now.toISOString().split('T')[0]} ${now
+      .toTimeString()
+      .slice(0, 5)}`;
+    const newMov: StockMovement = {
+      id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      date: formattedDate,
+      partId: part.id,
+      partName: part.name,
+      sku: part.sku,
+      type,
+      quantityChange,
+      targetReference,
+      performedBy,
+    };
+    setStockMovements((prev) => [newMov, ...prev]);
+  };
+
   // --- Handlers Flota ---
   const handleAddAmbulance = (newAmb: Omit<Ambulance, 'id'>) => {
     const created: Ambulance = {
@@ -119,6 +165,21 @@ export function App() {
   const handleUpdateMileage = (id: string, newMileage: number) => {
     setAmbulances((prev) =>
       prev.map((a) => (a.id === id ? { ...a, mileage: newMileage } : a))
+    );
+  };
+
+  const handleUpdateLegalDates = (
+    id: string,
+    itvExpiry: string,
+    sanitaryCertExpiry: string,
+    insuranceExpiry: string
+  ) => {
+    setAmbulances((prev) =>
+      prev.map((a) =>
+        a.id === id
+          ? { ...a, itvExpiry, sanitaryCertExpiry, insuranceExpiry }
+          : a
+      )
     );
   };
 
@@ -213,6 +274,17 @@ export function App() {
     if (!onboard) return;
     const needed = onboard.requiredQty - onboard.currentQty;
     if (needed <= 0) return;
+
+    const part = spareParts.find((sp) => sp.id === partId);
+    if (part) {
+      recordStockMovement(
+        part,
+        'Reposición a Bordo Vehículo',
+        -needed,
+        `Dotación a bordo ${amb.code} (${amb.plate})`,
+        'Taller / Almacén'
+      );
+    }
 
     setSpareParts((prev) =>
       prev.map((sp) =>
@@ -373,7 +445,6 @@ export function App() {
       id: `chk-rep-${Date.now()}`,
     };
 
-    // Actualizar kilometraje y stock real verificado en la ambulancia
     setAmbulances((prev) =>
       prev.map((a) => {
         if (a.id !== checklistData.ambulanceId) return a;
@@ -431,7 +502,6 @@ export function App() {
       )
     );
 
-    // Si la OT pasa a Finalizada, la ambulancia vuelve a estar Activa y actualiza fecha de última revisión
     if (wo && status === 'Finalizada') {
       const today = new Date().toISOString().split('T')[0];
       setAmbulances((prev) =>
@@ -455,9 +525,18 @@ export function App() {
     quantity: number
   ) => {
     const part = spareParts.find((p) => p.id === partId);
-    if (!part) return;
+    const wo = workOrders.find((w) => w.id === woId);
+    if (!part || !wo) return;
+    const amb = ambulances.find((a) => a.id === wo.ambulanceId);
 
-    // Descontar del inventario de taller
+    recordStockMovement(
+      part,
+      'Salida a Orden de Taller',
+      -quantity,
+      `${amb?.code || ''} (${amb?.plate || ''}) • ${wo.code}`,
+      wo.assignedMechanic
+    );
+
     setSpareParts((prev) =>
       prev.map((p) =>
         p.id === partId
@@ -466,14 +545,13 @@ export function App() {
       )
     );
 
-    // Añadir a la OT
     setWorkOrders((prev) =>
-      prev.map((wo) =>
-        wo.id === woId
+      prev.map((item) =>
+        item.id === woId
           ? {
-              ...wo,
+              ...item,
               partsUsed: [
-                ...wo.partsUsed,
+                ...item.partsUsed,
                 {
                   partId: part.id,
                   partName: part.name,
@@ -483,7 +561,7 @@ export function App() {
                 },
               ],
             }
-          : wo
+          : item
       )
     );
   };
@@ -531,6 +609,16 @@ export function App() {
   };
 
   const handleUpdatePartStock = (partId: string, delta: number) => {
+    const part = spareParts.find((p) => p.id === partId);
+    if (part) {
+      recordStockMovement(
+        part,
+        'Ajuste Manual Almacén',
+        delta,
+        `Almacén (${part.locationInWorkshop})`,
+        'Jefe de Almacén / Taller'
+      );
+    }
     setSpareParts((prev) =>
       prev.map((p) =>
         p.id === partId
@@ -540,17 +628,85 @@ export function App() {
     );
   };
 
+  const handleReceiveSupplierOrder = (partId: string, quantityToAdd: number) => {
+    const part = spareParts.find((p) => p.id === partId);
+    if (!part) return;
+    recordStockMovement(
+      part,
+      'Entrada Pedido Proveedor',
+      quantityToAdd,
+      `Recepción Proveedor: ${part.supplier}`,
+      'Recepción Almacén'
+    );
+    setSpareParts((prev) =>
+      prev.map((p) =>
+        p.id === partId
+          ? { ...p, stockQuantity: p.stockQuantity + quantityToAdd }
+          : p
+      )
+    );
+  };
+
+  // --- Exportar / Importar Copia de Seguridad JSON (Sincronizar Móvil y PC - 1.3) ---
+  const handleDownloadJsonBackup = () => {
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      ambulances,
+      preventiveSchedules,
+      checklists,
+      workOrders,
+      spareParts,
+      stockMovements,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ambufleet_copia_seguridad_${
+      new Date().toISOString().split('T')[0]
+    }.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportJsonBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target?.result as string);
+        if (data.ambulances) setAmbulances(data.ambulances);
+        if (data.preventiveSchedules)
+          setPreventiveSchedules(data.preventiveSchedules);
+        if (data.checklists) setChecklists(data.checklists);
+        if (data.workOrders) setWorkOrders(data.workOrders);
+        if (data.spareParts) setSpareParts(data.spareParts);
+        if (data.stockMovements) setStockMovements(data.stockMovements);
+        setShowBackupModal(false);
+      } catch {
+        alert('El archivo seleccionado no es una copia de seguridad válida.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleResetDemoData = () => {
     localStorage.removeItem(`${STORAGE_KEY}_ambulances`);
     localStorage.removeItem(`${STORAGE_KEY}_preventive`);
     localStorage.removeItem(`${STORAGE_KEY}_checklists`);
     localStorage.removeItem(`${STORAGE_KEY}_workorders`);
     localStorage.removeItem(`${STORAGE_KEY}_parts`);
+    localStorage.removeItem(`${STORAGE_KEY}_movements`);
     setAmbulances(INITIAL_AMBULANCES);
     setPreventiveSchedules(INITIAL_PREVENTIVE_SCHEDULES);
     setChecklists(INITIAL_CHECKLISTS);
     setWorkOrders(INITIAL_WORK_ORDERS);
     setSpareParts(INITIAL_SPARE_PARTS);
+    setStockMovements(INITIAL_STOCK_MOVEMENTS);
   };
 
   const navItems: {
@@ -623,19 +779,30 @@ export function App() {
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 line-clamp-1">
-                Checklists a pie de ambulancia, taller y stock de piezas por vehículo
+                Checklists con voz y fotos, WhatsApp a taller, vencimientos ITV y
+                stock
               </p>
             </div>
           </div>
 
-          <button
-            onClick={handleResetDemoData}
-            title="Restaurar datos de ejemplo iniciales"
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition shrink-0"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Restaurar Demo</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowBackupModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sincronizar / Datos</span>
+            </button>
+            <button
+              onClick={handleResetDemoData}
+              title="Restaurar datos de ejemplo iniciales"
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Demo</span>
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs (Desktop & Tablet Landscape) */}
@@ -731,6 +898,7 @@ export function App() {
             onDeleteAmbulance={handleDeleteAmbulance}
             onUpdateStatus={handleUpdateAmbulanceStatus}
             onUpdateMileage={handleUpdateMileage}
+            onUpdateLegalDates={handleUpdateLegalDates}
             onRestockVehiclePart={handleRestockVehiclePart}
             onUpdateVehiclePartQty={handleUpdateVehiclePartQty}
             onAddPartToVehicleOnboard={handleAddPartToVehicleOnboard}
@@ -778,12 +946,70 @@ export function App() {
           <PartsInventoryView
             spareParts={spareParts}
             ambulances={ambulances}
+            stockMovements={stockMovements}
             onAddSparePart={handleAddSparePart}
             onUpdatePartStock={handleUpdatePartStock}
             onRestockVehiclePart={handleRestockVehiclePart}
+            onReceiveSupplierOrder={handleReceiveSupplierOrder}
           />
         )}
       </main>
+
+      {/* Modal Sincronizar Móvil/PC y Exportar Copia de Seguridad (1.3) */}
+      {showBackupModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">
+                Sincronizar Móvil / PC y Exportar Datos
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowBackupModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Descarga una copia completa desde tu móvil/tablet para cargarla en
+              el ordenador del taller, o exporta las tablas a Excel (CSV).
+            </p>
+
+            <div className="space-y-2.5 text-xs">
+              <button
+                type="button"
+                onClick={handleDownloadJsonBackup}
+                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Descargar Copia de Seguridad (.JSON)
+              </button>
+
+              <label className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold flex items-center justify-center gap-2 cursor-pointer">
+                <Upload className="w-4 h-4 text-blue-600" />
+                <span>Cargar / Restaurar Copia desde Archivo (.JSON)</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportJsonBackup}
+                  className="hidden"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => exportFleetAndStockToCSV(ambulances, spareParts)}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-2"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Exportar Flota y Stock a Excel (.CSV)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

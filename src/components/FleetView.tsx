@@ -29,6 +29,12 @@ interface FleetViewProps {
   onDeleteAmbulance: (id: string) => void;
   onUpdateStatus: (id: string, status: AmbulanceStatus) => void;
   onUpdateMileage: (id: string, newMileage: number) => void;
+  onUpdateLegalDates: (
+    id: string,
+    itvExpiry: string,
+    sanitaryCertExpiry: string,
+    insuranceExpiry: string
+  ) => void;
   onRestockVehiclePart: (ambulanceId: string, partId: string) => void;
   onUpdateVehiclePartQty: (
     ambulanceId: string,
@@ -53,6 +59,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
   onDeleteAmbulance,
   onUpdateStatus,
   onUpdateMileage,
+  onUpdateLegalDates,
   onRestockVehiclePart,
   onUpdateVehiclePartQty,
   onAddPartToVehicleOnboard,
@@ -440,22 +447,160 @@ export const FleetView: React.FC<FleetViewProps> = ({
 
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
                     <span className="text-xs text-slate-500 block">
-                      Vencimientos Legales
+                      Resumen Semáforo Legal
                     </span>
-                    <div className="text-xs space-y-1 mt-1">
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">ITV:</span>
-                        <span className="font-bold text-slate-900">
-                          {selectedAmb.itvExpiry}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">Cert. Sanitario:</span>
-                        <span className="font-semibold text-slate-800">
-                          {selectedAmb.sanitaryCertExpiry}
-                        </span>
-                      </div>
-                    </div>
+                    {(() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const getDays = (d: string) =>
+                        Math.ceil(
+                          (new Date(d).getTime() - new Date(today).getTime()) /
+                            (1000 * 3600 * 24)
+                        );
+                      const dItv = getDays(selectedAmb.itvExpiry);
+                      const dSan = getDays(selectedAmb.sanitaryCertExpiry);
+                      const dIns = getDays(selectedAmb.insuranceExpiry);
+                      const minD = Math.min(dItv, dSan, dIns);
+                      return (
+                        <div className="mt-1.5 space-y-1 text-xs">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
+                              minD < 0
+                                ? 'bg-rose-600 text-white'
+                                : minD <= 30
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-emerald-600 text-white'
+                            }`}
+                          >
+                            {minD < 0
+                              ? 'DOCUMENTACIÓN VENCIDA'
+                              : minD <= 30
+                              ? `PRÓXIMO VENCIMIENTO (${minD}d)`
+                              : 'DOCUMENTACIÓN EN REGLA'}
+                          </span>
+                          <p className="text-[11px] text-slate-500">
+                            ITV ({dItv}d) • Sanitario ({dSan}d) • Seguro ({dIns}d)
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Semáforo de Caducidades Legales (ITV, Certificación Técnico-Sanitaria y Seguro) */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Semáforo de Caducidades Legales (ITV, Cert. Técnico-Sanitario y Seguro)
+                    </h3>
+                    <span className="text-[11px] text-slate-500">
+                      Alerta automática a los 30 días • Editable y renovable en 1 clic
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    {[
+                      {
+                        key: 'itv' as const,
+                        label: 'ITV Ambulancia',
+                        dateVal: selectedAmb.itvExpiry,
+                        renewMonths: 6,
+                        renewLabel: '+6 meses',
+                      },
+                      {
+                        key: 'sanitary' as const,
+                        label: 'Certificación Técnico-Sanitaria',
+                        dateVal: selectedAmb.sanitaryCertExpiry,
+                        renewMonths: 12,
+                        renewLabel: '+1 año',
+                      },
+                      {
+                        key: 'insurance' as const,
+                        label: 'Póliza de Seguro',
+                        dateVal: selectedAmb.insuranceExpiry,
+                        renewMonths: 12,
+                        renewLabel: '+1 año',
+                      },
+                    ].map((doc) => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const diffDays = Math.ceil(
+                        (new Date(doc.dateVal).getTime() -
+                          new Date(today).getTime()) /
+                          (1000 * 3600 * 24)
+                      );
+                      const isOverdue = diffDays < 0;
+                      const isSoon = diffDays >= 0 && diffDays <= 30;
+
+                      const handleDateChange = (newDate: string) => {
+                        onUpdateLegalDates(
+                          selectedAmb.id,
+                          doc.key === 'itv' ? newDate : selectedAmb.itvExpiry,
+                          doc.key === 'sanitary'
+                            ? newDate
+                            : selectedAmb.sanitaryCertExpiry,
+                          doc.key === 'insurance'
+                            ? newDate
+                            : selectedAmb.insuranceExpiry
+                        );
+                      };
+
+                      const handleQuickRenew = () => {
+                        const base =
+                          diffDays < 0 ? new Date() : new Date(doc.dateVal);
+                        base.setMonth(base.getMonth() + doc.renewMonths);
+                        handleDateChange(base.toISOString().split('T')[0]);
+                      };
+
+                      return (
+                        <div
+                          key={doc.key}
+                          className={`p-3 rounded-xl border ${
+                            isOverdue
+                              ? 'bg-rose-50 border-rose-300'
+                              : isSoon
+                              ? 'bg-amber-50 border-amber-300'
+                              : 'bg-white border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-1.5">
+                            <span className="font-bold text-slate-800">
+                              {doc.label}
+                            </span>
+                            <span
+                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                isOverdue
+                                  ? 'bg-rose-600 text-white'
+                                  : isSoon
+                                  ? 'bg-amber-500 text-white'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                            >
+                              {isOverdue
+                                ? `VENCIDO (${Math.abs(diffDays)}d)`
+                                : isSoon
+                                ? `VENCE EN ${diffDays}d`
+                                : `AL DÍA (${diffDays}d)`}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 mt-2">
+                            <input
+                              type="date"
+                              value={doc.dateVal}
+                              onChange={(e) => handleDateChange(e.target.value)}
+                              className="w-full px-2 py-1 rounded border border-slate-300 bg-white text-xs font-semibold"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleQuickRenew}
+                              title={`Renovar ${doc.renewLabel}`}
+                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold shrink-0"
+                            >
+                              {doc.renewLabel}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

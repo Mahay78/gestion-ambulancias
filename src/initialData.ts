@@ -5,6 +5,7 @@ import {
   WorkOrder,
   SparePart,
   ChecklistItem,
+  StockMovement,
 } from './types';
 
 export const DEFAULT_CHECKLIST_TEMPLATE: Omit<ChecklistItem, 'status' | 'comment'>[] = [
@@ -571,3 +572,51 @@ export const INITIAL_WORK_ORDERS: WorkOrder[] = [
     ],
   },
 ];
+
+export const INITIAL_STOCK_MOVEMENTS: StockMovement[] = [
+  {
+    id: 'mov-1',
+    date: '2026-11-21 09:30',
+    partId: 'part-7',
+    partName: 'Batería AGM 12V 105Ah Ciclo Profundo (Célula Sanitaria)',
+    sku: 'ELC-BAT-AGM105',
+    type: 'Salida a Orden de Taller',
+    quantityChange: -1,
+    targetReference: 'AMB-02 (9104-KTR) • OT-2026-001',
+    performedBy: 'Javier Ortega (Jefe de Taller)',
+  },
+  {
+    id: 'mov-2',
+    date: '2026-11-21 10:15',
+    partId: 'part-5',
+    partName: 'Juego Pastillas de Freno Delanteras Reforzadas',
+    sku: 'FRN-PAS-MB01',
+    type: 'Salida a Orden de Taller',
+    quantityChange: -1,
+    targetReference: 'AMB-02 (9104-KTR) • OT-2026-001',
+    performedBy: 'Javier Ortega (Jefe de Taller)',
+  },
+  {
+    id: 'mov-3',
+    date: '2026-11-18 16:40',
+    partId: 'part-4',
+    partName: 'Garrafa AdBlue 10L ISO 22241',
+    sku: 'ADB-10L-ISO',
+    type: 'Reposición a Bordo Vehículo',
+    quantityChange: -1,
+    targetReference: 'Dotación a bordo AMB-01 (4821-LKM)',
+    performedBy: 'Carlos Mendoza (Resp. Flota)',
+  },
+  {
+    id: 'mov-4',
+    date: '2026-11-10 11:20',
+    partId: 'part-8',
+    partName: 'Módulo Estroboscópico LED Azul Prioritario 12/24V',
+    sku: 'ELC-MOD-LED24',
+    type: 'Salida a Orden de Taller',
+    quantityChange: -1,
+    targetReference: 'AMB-01 (4821-LKM) • OT-2026-002',
+    performedBy: 'Miguel Ángel Ruiz (Electricista)',
+  },
+];
+

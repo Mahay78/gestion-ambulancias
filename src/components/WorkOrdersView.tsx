@@ -8,12 +8,19 @@ import {
   WorkOrderType,
 } from '../types';
 import { SignaturePad } from './SignaturePad';
+import { VoiceDictationButton } from './VoiceDictationButton';
+import {
+  shareWorkOrderViaWhatsApp,
+  printWorkOrderReport,
+} from '../utils/shareAndPrint';
 import {
   Plus,
   PackagePlus,
   Camera,
   CheckCircle2,
   PenTool,
+  MessageCircle,
+  Printer,
 } from 'lucide-react';
 
 interface WorkOrdersViewProps {
@@ -290,30 +297,48 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         </p>
                       </div>
 
-                      <div>
-                        <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-                          Estado de la Orden
-                        </label>
-                        <select
-                          value={selectedWo.status}
-                          onChange={(e) =>
-                            onUpdateWorkOrderStatus(
-                              selectedWo.id,
-                              e.target.value as WorkOrderStatus
-                            )
-                          }
-                          className="text-xs font-bold rounded-lg border border-slate-300 px-3 py-2 bg-slate-50 text-slate-900"
+                      <div className="flex flex-wrap items-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => shareWorkOrderViaWhatsApp(selectedWo, amb)}
+                          className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5"
                         >
-                          <option value="Pendiente">Pendiente</option>
-                          <option value="En Diagnóstico">En Diagnóstico</option>
-                          <option value="Esperando Repuestos">
-                            Esperando Repuestos
-                          </option>
-                          <option value="En Reparación">En Reparación</option>
-                          <option value="Finalizada">
-                            Finalizada (Alta Operativa Ambulancia)
-                          </option>
-                        </select>
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          WhatsApp
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => printWorkOrderReport(selectedWo, amb)}
+                          className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold flex items-center gap-1.5"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Hoja Taller PDF
+                        </button>
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
+                            Estado de la Orden
+                          </label>
+                          <select
+                            value={selectedWo.status}
+                            onChange={(e) =>
+                              onUpdateWorkOrderStatus(
+                                selectedWo.id,
+                                e.target.value as WorkOrderStatus
+                              )
+                            }
+                            className="text-xs font-bold rounded-lg border border-slate-300 px-3 py-2 bg-slate-50 text-slate-900"
+                          >
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="En Diagnóstico">En Diagnóstico</option>
+                            <option value="Esperando Repuestos">
+                              Esperando Repuestos
+                            </option>
+                            <option value="En Reparación">En Reparación</option>
+                            <option value="Finalizada">
+                              Finalizada (Alta Operativa Ambulancia)
+                            </option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -400,9 +425,23 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
-                        Informe de Intervención del Mecánico
-                      </label>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                        <label className="block text-xs font-bold uppercase text-slate-500">
+                          Informe de Intervención del Mecánico
+                        </label>
+                        <VoiceDictationButton
+                          label="Dictar Informe por Voz"
+                          onTranscript={(text) =>
+                            onUpdateWorkOrderDetails(
+                              selectedWo.id,
+                              selectedWo.laborHours,
+                              selectedWo.mechanicDiagnosis
+                                ? `${selectedWo.mechanicDiagnosis}. ${text}`
+                                : text
+                            )
+                          }
+                        />
+                      </div>
                       <textarea
                         rows={2}
                         value={selectedWo.mechanicDiagnosis}
@@ -413,7 +452,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                             e.target.value
                           )
                         }
-                        placeholder="Detalla las pruebas realizadas, códigos de avería OBD/diagnosis y trabajos efectuados..."
+                        placeholder="Detalla o dicta por voz las pruebas realizadas, códigos de avería OBD/diagnosis y trabajos efectuados..."
                         className="w-full p-3 rounded-xl border border-slate-300 text-xs"
                       />
                     </div>
@@ -692,9 +731,22 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Descripción de Síntomas
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-700 block">
+                    Descripción de Síntomas
+                  </label>
+                  <VoiceDictationButton
+                    label="Dictar Síntomas"
+                    onTranscript={(text) =>
+                      setNewWo((prev) => ({
+                        ...prev,
+                        description: prev.description
+                          ? `${prev.description}. ${text}`
+                          : text,
+                      }))
+                    }
+                  />
+                </div>
                 <textarea
                   rows={3}
                   required
