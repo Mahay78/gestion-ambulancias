@@ -1,0 +1,18 @@
+{
+  "name": "AmbuFleet Mecánica - Gestión de Ambulancias",
+  "short_name": "AmbuFleet",
+  "description": "Gestión mecánica de flota de ambulancias, checklists a pie de vehículo, órdenes de taller y stock de repuestos.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
