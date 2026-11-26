@@ -162,24 +162,11 @@ const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
   return `OR-2026-${String(maxNum + 1).padStart(3, '0')}`;
 };
 
-const APP_ACCESS_HASH = 'c919336885bc9d016455297942a21efbd83eb001371eb65b61cb5a90531bd95b'; // SHA-256 de Mahay1978
 const AUTH_SESSION_KEY = `${STORAGE_KEY}_authenticated`;
 
 const verifyAccessPassword = async (input: string): Promise<boolean> => {
-  const trimmed = input.trim();
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    try {
-      const encoded = new TextEncoder().encode(trimmed);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
-      const hashHex = Array.from(new Uint8Array(hashBuffer))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      return hashHex === APP_ACCESS_HASH;
-    } catch {
-      return trimmed === 'Mahay1978';
-    }
-  }
-  return trimmed === 'Mahay1978';
+  const normalized = input.trim().toLowerCase();
+  return normalized === 'mahay1978';
 };
 
 export function App() {
