@@ -41,6 +41,11 @@ import {
   saveCloudSyncConfig,
   formatBytes,
 } from './utils/storage';
+import {
+  DEFAULT_FIREBASE_CONFIG,
+  pushFleetStateToFirebase,
+  pullFleetStateFromFirebase,
+} from './utils/firebaseSync';
 import { ensureAmbulanceDocuments } from './utils/expiryAlerts';
 import {
   LayoutDashboard,
@@ -165,6 +170,8 @@ export function App() {
   const [storageStats, setStorageStats] = useState(() => getStorageUsageStats());
   const [quotaAlert, setQuotaAlert] = useState<boolean>(false);
   const [cloudConfig, setCloudConfig] = useState(() => getCloudSyncConfig());
+  const [firebaseStatusMsg, setFirebaseStatusMsg] = useState<string>('');
+  const [isSyncingFirebase, setIsSyncingFirebase] = useState<boolean>(false);
 
   const [ambulances, setAmbulances] = useState<Ambulance[]>(() =>
     hydrateAmbulancesWithFullFleet(
@@ -1064,6 +1071,75 @@ export function App() {
     setShowBackupModal(false);
   };
 
+  const handlePushToFirebase = async () => {
+    setIsSyncingFirebase(true);
+    setFirebaseStatusMsg('Subiendo datos a Firebase...');
+    const nowIso = new Date().toISOString();
+    const res = await pushFleetStateToFirebase(
+      {
+        updatedAt: nowIso,
+        updatedByRole: currentRole,
+        ambulances,
+        workshops,
+        preventiveSchedules,
+        checklists,
+        workOrders,
+        spareParts,
+        stockMovements,
+      },
+      cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
+      cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey
+    );
+    setIsSyncingFirebase(false);
+    if (res.ok) {
+      const next = { ...cloudConfig, lastSyncedAt: nowIso };
+      setCloudConfig(next);
+      saveCloudSyncConfig(next);
+      setFirebaseStatusMsg(
+        `✅ Sincronizado con Firebase (${new Date(nowIso).toLocaleTimeString('es-ES')})`
+      );
+    } else {
+      setFirebaseStatusMsg(`⚠️ ${res.error}`);
+    }
+  };
+
+  const handlePullFromFirebase = async () => {
+    setIsSyncingFirebase(true);
+    setFirebaseStatusMsg('Descargando estado de flota desde Firebase...');
+    const res = await pullFleetStateFromFirebase(
+      cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
+      cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey
+    );
+    setIsSyncingFirebase(false);
+    if (res.ok && res.data) {
+      const d = res.data;
+      if (d.ambulances)
+        setAmbulances(
+          hydrateAmbulancesWithFullFleet(d.ambulances as Ambulance[])
+        );
+      if (d.workshops) setWorkshops(d.workshops as ExternalWorkshop[]);
+      if (d.preventiveSchedules)
+        setPreventiveSchedules(d.preventiveSchedules as PreventiveSchedule[]);
+      if (d.checklists) setChecklists(d.checklists as FleetChecklist[]);
+      if (d.workOrders)
+        setWorkOrders(hydrateWorkOrders(d.workOrders as WorkOrder[]));
+      if (d.spareParts)
+        setSpareParts(hydrateSpareParts(d.spareParts as SparePart[]));
+      if (d.stockMovements)
+        setStockMovements(d.stockMovements as StockMovement[]);
+      const next = { ...cloudConfig, lastSyncedAt: d.updatedAt };
+      setCloudConfig(next);
+      saveCloudSyncConfig(next);
+      setFirebaseStatusMsg(
+        `✅ Datos actualizados desde Firebase (subidos por ${d.updatedByRole} el ${new Date(
+          d.updatedAt
+        ).toLocaleString('es-ES')})`
+      );
+    } else {
+      setFirebaseStatusMsg(`⚠️ ${res.error}`);
+    }
+  };
+
   const handleResetDemoData = () => {
     localStorage.removeItem(`${STORAGE_KEY}_ambulances`);
     localStorage.removeItem(`${STORAGE_KEY}_workshops`);
@@ -1564,42 +1640,67 @@ export function App() {
               </button>
             </div>
 
-            {/* Preparación Sincronización Nube 2 Usuarios (Supabase) */}
-            <div className="pt-3 border-t border-slate-200 space-y-2 text-xs">
-              <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                <Cloud className="w-4 h-4 text-blue-600" />
-                Sincronización Multiusuario (Preparado para Supabase: 2 Usuarios)
-              </span>
-              <p className="text-[11px] text-slate-500">
-                Configura las credenciales del proyecto Supabase cuando despliegues el backend para sincronizar automáticamente Encargado y Operador.
-              </p>
-              <div className="grid grid-cols-1 gap-2">
-                <input
-                  type="url"
-                  placeholder="https://tu-proyecto.supabase.co"
-                  value={cloudConfig.supabaseUrl}
-                  onChange={(e) => {
-                    const next = { ...cloudConfig, supabaseUrl: e.target.value };
-                    setCloudConfig(next);
-                    saveCloudSyncConfig(next);
-                  }}
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 font-mono text-[11px]"
-                />
-                <input
-                  type="password"
-                  placeholder="SUPABASE_ANON_KEY (opcional)"
-                  value={cloudConfig.supabaseAnonKey}
-                  onChange={(e) => {
-                    const next = {
-                      ...cloudConfig,
-                      supabaseAnonKey: e.target.value,
-                      enabled: Boolean(cloudConfig.supabaseUrl && e.target.value),
-                    };
-                    setCloudConfig(next);
-                    saveCloudSyncConfig(next);
-                  }}
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 font-mono text-[11px]"
-                />
+            {/* Sincronización Nube 2 Usuarios en Firebase (Proyecto: gestion-ambulancias-flota) */}
+            <div className="pt-3 border-t border-slate-200 space-y-2.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <Cloud className="w-4 h-4 text-amber-500" />
+                  Sincronización en la Nube con Firebase (2 Usuarios)
+                </span>
+                <a
+                  href={DEFAULT_FIREBASE_CONFIG.hostingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-bold text-blue-600 hover:underline"
+                >
+                  Abrir App en Firebase Hosting ↗
+                </a>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-slate-700">
+                    Proyecto Firebase:{' '}
+                    <strong className="font-mono text-slate-900">
+                      {cloudConfig.firebaseProjectId}
+                    </strong>
+                  </span>
+                  {cloudConfig.lastSyncedAt && (
+                    <span className="text-emerald-700 font-bold">
+                      Última sync:{' '}
+                      {new Date(cloudConfig.lastSyncedAt).toLocaleTimeString(
+                        'es-ES'
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isSyncingFirebase}
+                    onClick={handlePushToFirebase}
+                    className="py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Subir Datos a Firebase
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSyncingFirebase}
+                    onClick={handlePullFromFirebase}
+                    className="py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Descargar desde Firebase
+                  </button>
+                </div>
+
+                {firebaseStatusMsg && (
+                  <p className="text-[11px] font-medium text-slate-700 bg-white/90 p-2 rounded-lg border border-amber-200">
+                    {firebaseStatusMsg}
+                  </p>
+                )}
               </div>
             </div>
           </div>

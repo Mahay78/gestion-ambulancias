@@ -19,6 +19,9 @@ export interface StorageUsageStats {
 
 export interface CloudSyncConfig {
   enabled: boolean;
+  provider: 'firebase' | 'supabase';
+  firebaseProjectId: string;
+  firebaseApiKey: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
   lastSyncedAt?: string;
@@ -110,11 +113,20 @@ export const loadAutoBackupSnapshot = <T,>(): AutoBackupSnapshot<T> | null => {
 export const getCloudSyncConfig = (): CloudSyncConfig => {
   const envUrl = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_SUPABASE_URL || '';
   const envKey = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_SUPABASE_ANON_KEY || '';
-  return safeLoadFromStorage<CloudSyncConfig>(`${STORAGE_KEY}_cloud_sync`, {
-    enabled: Boolean(envUrl && envKey),
-    supabaseUrl: envUrl,
-    supabaseAnonKey: envKey,
-  });
+  const saved = safeLoadFromStorage<Partial<CloudSyncConfig>>(
+    `${STORAGE_KEY}_cloud_sync`,
+    {}
+  );
+  return {
+    enabled: saved.enabled ?? true,
+    provider: saved.provider || 'firebase',
+    firebaseProjectId: saved.firebaseProjectId || 'gestion-ambulancias-flota',
+    firebaseApiKey:
+      saved.firebaseApiKey || 'AIzaSyCULiQnlrBZqqcB7D_WrA9LyayoHZMh9zU',
+    supabaseUrl: saved.supabaseUrl || envUrl,
+    supabaseAnonKey: saved.supabaseAnonKey || envKey,
+    lastSyncedAt: saved.lastSyncedAt,
+  };
 };
 
 export const saveCloudSyncConfig = (config: CloudSyncConfig): void => {
