@@ -68,6 +68,10 @@ import {
   History,
   Cloud,
   UserCheck,
+  Lock,
+  LogOut,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 type ActiveTab =
@@ -158,7 +162,41 @@ const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
   return `OR-2026-${String(maxNum + 1).padStart(3, '0')}`;
 };
 
+const APP_ACCESS_HASH = 'c919336885bc9d016455297942a21efbd83eb001371eb65b61cb5a90531bd95b'; // SHA-256 de Mahay1978
+const AUTH_SESSION_KEY = `${STORAGE_KEY}_authenticated`;
+
+const verifyAccessPassword = async (input: string): Promise<boolean> => {
+  const trimmed = input.trim();
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const encoded = new TextEncoder().encode(trimmed);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+      const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      return hashHex === APP_ACCESS_HASH;
+    } catch {
+      return trimmed === 'Mahay1978';
+    }
+  }
+  return trimmed === 'Mahay1978';
+};
+
 export function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return (
+        sessionStorage.getItem(AUTH_SESSION_KEY) === 'true' ||
+        localStorage.getItem(AUTH_SESSION_KEY) === 'true'
+      );
+    } catch {
+      return false;
+    }
+  });
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [rememberDevice, setRememberDevice] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<string>('');
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [currentRole, setCurrentRole] = useState<UserRole>(() =>
     safeLoadFromStorage<UserRole>(`${STORAGE_KEY}_role`, 'Encargado')
@@ -1229,6 +1267,132 @@ export function App() {
       ? allNavItems
       : allNavItems.filter((item) => !item.encargadoOnly);
 
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const valid = await verifyAccessPassword(passwordInput);
+    if (valid) {
+      setIsAuthenticated(true);
+      setAuthError('');
+      setPasswordInput('');
+      try {
+        sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
+        if (rememberDevice) {
+          localStorage.setItem(AUTH_SESSION_KEY, 'true');
+        }
+      } catch {
+        // Ignorar errores de storage
+      }
+    } else {
+      setAuthError('Contraseña incorrecta. Verifica mayúsculas y números.');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setPasswordInput('');
+    try {
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+      localStorage.removeItem(AUTH_SESSION_KEY);
+    } catch {
+      // Ignorar errores de storage
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-sm w-full bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-5">
+          <div className="flex flex-col items-center text-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-rose-600 flex items-center justify-center shadow-md">
+              <Activity className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-extrabold text-slate-900">
+                AmbuFleet <span className="text-rose-600">Flota</span>
+              </h1>
+              <p className="text-xs text-slate-500">
+                Gestión de 21 Ambulancias y Talleres Externos
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
+            <div>
+              <label className="font-bold text-slate-700 block mb-1.5 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-blue-600" />
+                Contraseña de Acceso
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoFocus
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    if (authError) setAuthError('');
+                  }}
+                  placeholder="Introduce la contraseña..."
+                  className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-2.5 p-1 text-slate-400 hover:text-slate-700"
+                  title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              {authError && (
+                <p className="text-rose-600 font-bold mt-1.5">{authError}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1.5">
+                Entrar con el Rol
+              </label>
+              <select
+                value={currentRole}
+                onChange={(e) => setCurrentRole(e.target.value as UserRole)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 font-bold text-slate-900"
+              >
+                <option value="Encargado">
+                  Encargado de Vehículos (Acceso Completo)
+                </option>
+                <option value="Operador">
+                  Operador (Flota, Incidencias, Stock y Checklists)
+                </option>
+              </select>
+            </div>
+
+            <label className="flex items-center gap-2 text-slate-600 font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rememberDevice}
+                onChange={(e) => setRememberDevice(e.target.checked)}
+                className="rounded text-blue-600"
+              />
+              Recordar acceso en este móvil / tablet
+            </label>
+
+            <button
+              type="submit"
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition"
+            >
+              Entrar a AmbuFleet
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col pb-24 lg:pb-6">
       {/* Top Navbar adaptada a Móvil, Tablet y Escritorio */}
@@ -1329,6 +1493,15 @@ export function App() {
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Demo</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Bloquear aplicación / Cerrar sesión"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-200 text-xs font-medium flex items-center gap-1 border border-rose-800 transition"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Salir</span>
             </button>
           </div>
         </div>
