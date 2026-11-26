@@ -200,6 +200,29 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         </button>
       </div>
 
+      {/* Selector Rápido de Orden en Móvil y Tablet Vertical (< 1024px) */}
+      {filteredOrders.length > 0 && (
+        <div className="lg:hidden bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+          <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600">
+            Seleccionar Orden Externa ({filteredOrders.length})
+          </label>
+          <select
+            value={selectedWo?.id || ''}
+            onChange={(e) => setSelectedWoId(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-xs font-bold text-slate-900"
+          >
+            {filteredOrders.map((wo) => {
+              const amb = ambulances.find((a) => a.id === wo.ambulanceId);
+              return (
+                <option key={wo.id} value={wo.id}>
+                  {wo.code} — {amb?.code} ({amb?.plate}) • {wo.title} [{wo.status}]
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
+
       {/* Layout Maestro-Detalle de Órdenes de Reparación Externas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Lista de Órdenes */}
@@ -293,7 +316,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         {/* Detalle de la Orden Externa seleccionada */}
         {selectedWo && (
           <div className="lg:col-span-7">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-6">
               {(() => {
                 const amb = ambulances.find(
                   (a) => a.id === selectedWo.ambulanceId

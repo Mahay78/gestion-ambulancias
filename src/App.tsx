@@ -1154,32 +1154,32 @@ export function App() {
       : allNavItems.filter((item) => !item.encargadoOnly);
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col pb-20 md:pb-6">
-      {/* Top Navbar */}
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-600 flex items-center justify-center shadow-sm shrink-0">
-              <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+    <div className="min-h-screen bg-slate-100 flex flex-col pb-24 lg:pb-6">
+      {/* Top Navbar adaptada a Móvil, Tablet y Escritorio */}
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 safe-top shadow-md">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-600 flex items-center justify-center shadow-sm shrink-0">
+              <Activity className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-extrabold tracking-tight">
+                <h1 className="text-sm sm:text-lg font-extrabold tracking-tight truncate">
                   AmbuFleet <span className="text-rose-400">Flota</span>
                 </h1>
-                <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                  Gestión de 21 Ambulancias y Talleres Externos
+                <span className="hidden md:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  21 Ambulancias • Talleres Externos
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-400 line-clamp-1">
+              <p className="hidden sm:block text-[11px] sm:text-xs text-slate-400 truncate">
                 Disponibilidad, vencimientos 30/15/7d, órdenes a talleres externos y stock propio
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Selector de Rol: Encargado (todo) / Operador (flota, incidencias, stock, checklists) */}
-            <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs">
+            <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
               <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               <select
                 value={currentRole}
@@ -1196,13 +1196,13 @@ export function App() {
                   }
                 }}
                 aria-label="Seleccionar rol de usuario"
-                className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+                className="bg-transparent text-white font-bold text-[11px] sm:text-xs focus:outline-none cursor-pointer"
               >
                 <option value="Encargado" className="text-slate-900">
-                  Rol: Encargado
+                  Encargado
                 </option>
                 <option value="Operador" className="text-slate-900">
-                  Rol: Operador
+                  Operador
                 </option>
               </select>
             </div>
@@ -1212,7 +1212,7 @@ export function App() {
                   ? 'PWA Conectada (Service Worker activo para uso offline)'
                   : 'Modo sin conexión activo: trabajando sobre caché local'
               }
-              className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border ${
+              className={`px-2 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 border ${
                 isOnline
                   ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
                   : 'bg-amber-950/80 text-amber-300 border-amber-700'
@@ -1221,12 +1221,12 @@ export function App() {
               {isOnline ? (
                 <>
                   <Wifi className="w-3.5 h-3.5" />
-                  <span className="hidden lg:inline">Online PWA</span>
+                  <span className="hidden xl:inline">Online PWA</span>
                 </>
               ) : (
                 <>
                   <WifiOff className="w-3.5 h-3.5" />
-                  <span>Offline</span>
+                  <span className="hidden sm:inline">Offline</span>
                 </>
               )}
             </span>
@@ -1234,31 +1234,31 @@ export function App() {
             <button
               type="button"
               onClick={() => setShowBackupModal(true)}
-              className={`px-2.5 py-1.5 rounded-lg text-white text-xs font-semibold flex items-center gap-1.5 transition ${
+              className={`px-2.5 py-1.5 rounded-lg text-white text-xs font-semibold flex items-center gap-1 transition ${
                 storageStats.isWarning || quotaAlert
                   ? 'bg-amber-600 hover:bg-amber-700'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
               <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Backup / Sync</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/20 font-mono">
+              <span className="hidden sm:inline">Backup</span>
+              <span className="text-[10px] px-1 py-0.2 rounded bg-black/25 font-mono">
                 {storageStats.usagePercent}%
               </span>
             </button>
             <button
               onClick={handleResetDemoData}
               title="Restaurar datos de ejemplo iniciales (21 ambulancias)"
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Demo (21)</span>
+              <span className="hidden md:inline">Demo</span>
             </button>
           </div>
         </div>
 
-        {/* Navigation Tabs (Desktop & Tablet Landscape) */}
-        <div className="hidden md:flex max-w-7xl mx-auto px-4 sm:px-6 items-center gap-1 overflow-x-auto pb-2">
+        {/* Navigation Tabs (Tablet Horizontal y Escritorio >= 1024px) */}
+        <div className="hidden lg:flex max-w-7xl mx-auto px-4 sm:px-6 items-center gap-1.5 overflow-x-auto no-scrollbar pb-2">
           {navItems.map((item) => {
             const isActive = activeTab === item.id;
             return (
@@ -1290,49 +1290,47 @@ export function App() {
         </div>
       </header>
 
-      {/* Bottom Navigation Bar (Móvil y Tablet Vertical) */}
-      <nav
-        className={`md:hidden fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 z-50 px-1 py-1.5 grid gap-0.5 shadow-2xl ${
-          navItems.length <= 4 ? 'grid-cols-4' : 'grid-cols-7'
-        }`}
-      >
-        {navItems.map((item) => {
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className={`relative flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition ${
-                isActive
-                  ? 'bg-blue-600 text-white font-bold'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {item.icon}
-              <span className="text-[10px] mt-1 tracking-tight truncate max-w-full">
-                {item.shortLabel}
-              </span>
-              {item.badge !== undefined && item.badge > 0 && (
-                <span
-                  className={`absolute top-0.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold flex items-center justify-center ${
-                    isActive
-                      ? 'bg-white text-blue-700'
-                      : 'bg-rose-600 text-white'
-                  }`}
-                >
-                  {item.badge}
+      {/* Bottom Navigation Bar Táctil (Móvil y Tablet Vertical < 1024px) con scroll horizontal suave si hay 7 pestañas */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 z-50 px-1.5 pt-1.5 safe-bottom shadow-2xl">
+        <div className="flex items-center justify-around gap-1 overflow-x-auto no-scrollbar">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`relative flex-1 min-w-[60px] sm:min-w-[84px] flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition ${
+                  isActive
+                    ? 'bg-blue-600 text-white font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 active:bg-slate-800'
+                }`}
+              >
+                {item.icon}
+                <span className="text-[10px] sm:text-[11px] mt-1 tracking-tight truncate max-w-full">
+                  {item.shortLabel}
                 </span>
-              )}
-            </button>
-          );
-        })}
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span
+                    className={`absolute top-1 right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold flex items-center justify-center ${
+                      isActive
+                        ? 'bg-white text-blue-700'
+                        : 'bg-rose-600 text-white'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 space-y-4">
+      <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 flex-1 space-y-4">
         {/* Aviso automático de límite de almacenamiento local */}
         {(storageStats.isWarning || quotaAlert) && (
           <div
