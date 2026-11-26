@@ -1474,14 +1474,6 @@ export function App() {
               </span>
             </button>
             <button
-              onClick={handleResetDemoData}
-              title="Restaurar datos de ejemplo iniciales (21 ambulancias)"
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Demo</span>
-            </button>
-            <button
               type="button"
               onClick={handleLogout}
               title="Bloquear aplicación / Cerrar sesión"
