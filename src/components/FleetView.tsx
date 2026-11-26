@@ -96,14 +96,14 @@ export const FleetView: React.FC<FleetViewProps> = ({
 
   // Formulario nueva ambulancia
   const [newAmb, setNewAmb] = useState({
-    code: `AMB-0${ambulances.length + 1}`,
+    code: `AMB-${String(ambulances.length + 1).padStart(2, '0')}`,
     plate: '',
     brand: 'Mercedes-Benz',
     model: 'Sprinter 316 CDI',
     year: 2024,
     vin: 'WDB9076431N000000',
     type: 'SVA (UVI Móvil)' as AmbulanceType,
-    status: 'Activa' as AmbulanceStatus,
+    status: 'Disponible' as AmbulanceStatus,
     mileage: 15000,
     baseLocation: 'Base Central - Hospital General',
     fuelType: 'Diésel + AdBlue' as Ambulance['fuelType'],
@@ -222,7 +222,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
       {/* Barra superior de filtros y botón nueva unidad */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          {['Todas', 'Activa', 'En Taller', 'Revisión Pendiente', 'Fuera de Servicio'].map(
+          {['Todas', 'Disponible', 'En taller', 'Fuera de servicio'].map(
             (st) => (
               <button
                 key={st}
@@ -321,9 +321,9 @@ export const FleetView: React.FC<FleetViewProps> = ({
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span
                         className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          amb.status === 'Activa'
+                          amb.status === 'Disponible'
                             ? 'bg-emerald-100 text-emerald-800'
-                            : amb.status === 'En Taller'
+                            : amb.status === 'En taller'
                             ? 'bg-amber-100 text-amber-800'
                             : 'bg-rose-100 text-rose-800'
                         }`}
@@ -403,11 +403,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
                         }
                         className="text-xs font-bold rounded-lg border border-slate-300 px-3 py-2 bg-slate-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="Activa">Activa (Operativa)</option>
-                        <option value="En Taller">En Taller Mecánico</option>
-                        <option value="Revisión Pendiente">Revisión Pendiente</option>
-                        <option value="Fuera de Servicio">
-                          Fuera de Servicio (Baja Temp.)
+                        <option value="Disponible">Disponible (Operativa)</option>
+                        <option value="En taller">En taller externo</option>
+                        <option value="Fuera de servicio">
+                          Fuera de servicio (Baja Temp.)
                         </option>
                       </select>
                     </div>
@@ -912,7 +911,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
                         <div>
                           <p className="font-semibold text-slate-800">{sp.name}</p>
                           <p className="text-[11px] text-slate-500">
-                            SKU: {sp.sku} • {sp.locationInWorkshop}
+                            SKU: {sp.sku} • {sp.warehouseLocation}
                           </p>
                         </div>
                         <span
@@ -952,8 +951,8 @@ export const FleetView: React.FC<FleetViewProps> = ({
                               {wo.title}
                             </span>
                             <p className="text-slate-500 mt-0.5">
-                              {wo.createdAt} • {wo.mileageAtEntry.toLocaleString()} km •
-                              Mecánico: {wo.assignedMechanic}
+                              Entrada: {wo.entryDate || wo.createdAt} •{' '}
+                              {wo.mileageAtEntry.toLocaleString()} km
                             </p>
                           </div>
                           <span className="px-2.5 py-1 rounded-full font-semibold bg-slate-100 text-slate-800">

@@ -52,9 +52,9 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
     compatibleModelsText: 'Mercedes-Benz Sprinter, Volkswagen Crafter',
     stockQuantity: 10,
     minStockAlert: 4,
-    unitCost: 0,
-    locationInWorkshop: 'Estantería A-05',
+    warehouseLocation: 'Almacén Central - Estante A1',
     supplier: 'Recambios ProFlota',
+    supplierContact: '954 200 111 / pedidos@proflota.es',
     isVehicleOnboardStandard: false,
   });
 
@@ -143,9 +143,9 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
         .filter(Boolean),
       stockQuantity: newPart.stockQuantity,
       minStockAlert: newPart.minStockAlert,
-      unitCost: 0,
-      locationInWorkshop: newPart.locationInWorkshop,
+      warehouseLocation: newPart.warehouseLocation,
       supplier: newPart.supplier,
+      supplierContact: newPart.supplierContact,
       isVehicleOnboardStandard: newPart.isVehicleOnboardStandard,
     });
     setShowAddModal(false);
@@ -309,7 +309,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                         </td>
                         <td className="py-3 px-4 text-slate-600">
                           <strong className="text-slate-800 block">
-                            {part.locationInWorkshop}
+                            {part.warehouseLocation}
                           </strong>
                           <span>{part.supplier}</span>
                         </td>
@@ -501,7 +501,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                             {part.name}
                           </span>
                           <span className="font-mono text-[11px] text-slate-500">
-                            {part.sku} • {part.locationInWorkshop}
+                            {part.sku} • {part.warehouseLocation}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center">

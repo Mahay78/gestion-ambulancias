@@ -1,5 +1,6 @@
 import {
   Ambulance,
+  ExternalWorkshop,
   FleetChecklist,
   SparePart,
   WorkOrder,
@@ -64,30 +65,35 @@ export const shareChecklistViaWhatsApp = (
   );
 };
 
-export const shareWorkOrderViaWhatsApp = (wo: WorkOrder, amb?: Ambulance) => {
+export const shareWorkOrderViaWhatsApp = (
+  wo: WorkOrder,
+  amb?: Ambulance,
+  ws?: ExternalWorkshop
+) => {
   const partsLines =
     wo.partsUsed.length > 0
       ? wo.partsUsed
           .map((p) => `• ${p.partName} (${p.sku}) x${p.quantity} uds.`)
           .join('\n')
-      : '• Sin repuestos imputados todavía';
+      : '• Sin repuestos propios suministrados';
 
   const text = [
-    `🛠️ *ORDEN DE TRABAJO TALLER: ${wo.code}*`,
+    `🛠️ *ORDEN DE REPARACIÓN EXTERNA: ${wo.code}*`,
     `*Unidad:* ${amb?.code || ''} (${amb?.plate || ''}) - ${amb?.brand || ''} ${
       amb?.model || ''
     }`,
+    `*Taller Externo:* ${ws?.name || 'Por asignar'} (${ws?.phone || ''})`,
     `*Estado:* ${wo.status.toUpperCase()} | *Prioridad:* ${wo.priority}`,
-    `*Km Entrada:* ${wo.mileageAtEntry.toLocaleString()} km`,
-    `*Mecánico:* ${wo.assignedMechanic}`,
+    `*Fecha Entrada:* ${wo.entryDate || wo.createdAt} | *Km:* ${wo.mileageAtEntry.toLocaleString()} km`,
     ``,
-    `📌 *Avería:* ${wo.title}`,
+    `📌 *Motivo:* ${wo.title}`,
     `*Detalle:* ${wo.description}`,
     ``,
-    `🔩 *Diagnóstico Técnico (${wo.laborHours} h):*`,
-    wo.mechanicDiagnosis || 'Pendiente de diagnóstico',
+    `🔩 *Informe del Taller Externo:*`,
+    wo.workshopReport || 'Pendiente de informe del taller',
+    `*Garantía:* ${wo.warranty || 'Estándar taller'}`,
     ``,
-    `📦 *Repuestos Utilizados:*`,
+    `📦 *Repuestos Suministrados desde Nuestro Almacén:*`,
     partsLines,
   ].join('\n');
 
@@ -238,7 +244,11 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
   win.document.close();
 };
 
-export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
+export const printWorkOrderReport = (
+  wo: WorkOrder,
+  amb?: Ambulance,
+  ws?: ExternalWorkshop
+) => {
   const win = window.open('', '_blank');
   if (!win) return;
 
@@ -260,7 +270,7 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
           </tr>`
           )
           .join('')
-      : `<tr><td colspan="3" style="padding:8px;border:1px solid #cbd5e1;text-align:center;font-size:12px;">Sin repuestos registrados</td></tr>`;
+      : `<tr><td colspan="3" style="padding:8px;border:1px solid #cbd5e1;text-align:center;font-size:12px;">Sin repuestos propios suministrados</td></tr>`;
 
   const safePhotos = (wo.photos || []).filter((p) =>
     p.startsWith('data:image/')
@@ -284,9 +294,10 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
     wo.inspectorSignature && wo.inspectorSignature.startsWith('data:image/')
       ? wo.inspectorSignature
       : '';
-  const safeMechanicSig =
-    wo.mechanicSignature && wo.mechanicSignature.startsWith('data:image/')
-      ? wo.mechanicSignature
+  const safeConformitySig =
+    wo.workshopConformitySignature &&
+    wo.workshopConformitySignature.startsWith('data:image/')
+      ? wo.workshopConformitySignature
       : '';
 
   win.document.write(`
@@ -294,7 +305,7 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
     <html lang="es">
     <head>
       <meta charset="utf-8" />
-      <title>Orden de Trabajo ${escapeHtml(wo.code)} - ${escapeHtml(
+      <title>Orden de Reparación Externa ${escapeHtml(wo.code)} - ${escapeHtml(
         amb?.plate
       )}</title>
       <style>
@@ -306,20 +317,22 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
     <body>
       <div class="no-print" style="margin-bottom:16px;text-align:right;">
         <button onclick="window.print()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">
-          Imprimir Hoja de Taller / Guardar PDF
+          Imprimir Volante de Taller Externo / Guardar PDF
         </button>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px;">
         <div>
-          <h1 style="font-size:18px;margin:0;">ORDEN DE TRABAJO EN TALLER — ${escapeHtml(
+          <h1 style="font-size:18px;margin:0;">ORDEN DE REPARACIÓN EXTERNA — ${escapeHtml(
             wo.code
           )}</h1>
-          <p style="font-size:12px;color:#475569;margin:4px 0 0;">AmbuFleet Mecánica • Gestión de Flota Sanitaria</p>
+          <p style="font-size:12px;color:#475569;margin:4px 0 0;">AmbuFleet • Gestión de Flota de Ambulancias</p>
         </div>
         <div style="text-align:right;font-size:12px;">
           <strong>Estado:</strong> ${escapeHtml(wo.status)}<br/>
           <strong>Prioridad:</strong> ${escapeHtml(wo.priority)}<br/>
-          <strong>Fecha Entrada:</strong> ${escapeHtml(wo.createdAt)}
+          <strong>Entrada:</strong> ${escapeHtml(
+            wo.entryDate || wo.createdAt
+          )} ${wo.exitDate ? `| <strong>Salida:</strong> ${escapeHtml(wo.exitDate)}` : ''}
         </div>
       </div>
 
@@ -331,37 +344,42 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
           amb?.model
         )}</div>
         <div><strong>Km Entrada:</strong> ${wo.mileageAtEntry.toLocaleString()} km</div>
-        <div><strong>Tipo:</strong> ${escapeHtml(wo.type)}</div>
-        <div><strong>Solicitado por:</strong> ${escapeHtml(wo.reportedBy)}</div>
-        <div><strong>Mecánico:</strong> ${escapeHtml(wo.assignedMechanic)}</div>
+        <div><strong>Taller Externo:</strong> ${escapeHtml(
+          ws?.name || 'Taller Externo'
+        )}</div>
+        <div><strong>Contacto Taller:</strong> ${escapeHtml(
+          ws?.contactPerson || '-'
+        )} (${escapeHtml(ws?.phone || '-')})</div>
+        <div><strong>Reportado por:</strong> ${escapeHtml(wo.reportedBy)}</div>
       </div>
 
       <div style="margin-top:14px;font-size:12px;background:#f1f5f9;padding:12px;border-radius:6px;">
-        <p style="margin:0 0 6px;"><strong>Avería / Trabajo Solicitado:</strong> ${escapeHtml(
+        <p style="margin:0 0 6px;"><strong>Motivo de la Reparación:</strong> ${escapeHtml(
           wo.title
         )}</p>
-        <p style="margin:0;"><strong>Descripción de Síntomas:</strong> ${escapeHtml(
+        <p style="margin:0;"><strong>Descripción / Síntomas:</strong> ${escapeHtml(
           wo.description
         )}</p>
       </div>
 
       <div style="margin-top:14px;font-size:12px;background:#fff;border:1px solid #cbd5e1;padding:12px;border-radius:6px;">
-        <p style="margin:0 0 6px;"><strong>Informe de Intervención del Mecánico (${escapeHtml(
-          wo.laborHours
-        )} horas invertidas):</strong></p>
-        <p style="margin:0;">${
-          escapeHtml(wo.mechanicDiagnosis) ||
-          'Pendiente de completar informe técnico.'
+        <p style="margin:0 0 6px;"><strong>Informe del Taller Externo:</strong></p>
+        <p style="margin:0 0 8px;">${
+          escapeHtml(wo.workshopReport) ||
+          'Pendiente de informe del taller externo.'
         }</p>
+        <p style="margin:0;"><strong>Garantía de Reparación:</strong> ${escapeHtml(
+          wo.warranty || 'Según condiciones de taller externo'
+        )}</p>
       </div>
 
-      <h3 style="font-size:13px;margin-top:16px;margin-bottom:4px;">Repuestos Instalados del Almacén</h3>
+      <h3 style="font-size:13px;margin-top:16px;margin-bottom:4px;">Repuestos Suministrados desde Almacén Propio</h3>
       <table>
         <thead>
           <tr style="background:#e2e8f0;font-size:11px;text-align:left;">
             <th style="padding:6px 8px;border:1px solid #cbd5e1;">Repuesto</th>
             <th style="padding:6px 8px;border:1px solid #cbd5e1;">Código SKU</th>
-            <th style="padding:6px 8px;border:1px solid #cbd5e1;text-align:center;">Cantidad</th>
+            <th style="padding:6px 8px;border:1px solid #cbd5e1;text-align:center;">Cantidad Suministrada</th>
           </tr>
         </thead>
         <tbody>${partsHtml}</tbody>
@@ -371,7 +389,7 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
 
       <div style="margin-top:24px;border-top:1px solid #cbd5e1;padding-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
         <div style="border:1px solid #cbd5e1;padding:10px;border-radius:8px;">
-          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Entrega a Taller (Resp. Flota — ${escapeHtml(
+          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Entrega a Taller Externo (${escapeHtml(
             wo.reportedBy
           )}):</p>
           ${
@@ -381,12 +399,12 @@ export const printWorkOrderReport = (wo: WorkOrder, amb?: Ambulance) => {
           }
         </div>
         <div style="border:1px solid #cbd5e1;padding:10px;border-radius:8px;">
-          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Alta Mecánica (Jefe de Taller — ${escapeHtml(
-            wo.assignedMechanic
+          <p style="font-size:11px;font-weight:bold;margin:0 0 6px;">Firma Recepción / Taller Externo (${escapeHtml(
+            ws?.name || 'Taller'
           )}):</p>
           ${
-            safeMechanicSig
-              ? `<img src="${safeMechanicSig}" style="height:60px;object-contain;" />`
+            safeConformitySig
+              ? `<img src="${safeConformitySig}" style="height:60px;object-contain;" />`
               : `<div style="height:60px;border-bottom:1px dashed #94a3b8;"></div>`
           }
         </div>
@@ -402,7 +420,7 @@ export const exportFleetAndStockToCSV = (
   spareParts: SparePart[]
 ) => {
   const lines: string[] = [
-    'SECCION,CODIGO/SKU,MATRICULA/NOMBRE,MARCA/CATEGORIA,MODELO/UBICACION,ESTADO/STOCK,KM/STOCK_MIN,ITV_VENCIMIENTO,CERT_SANITARIO',
+    'SECCION,CODIGO/SKU,MATRICULA/NOMBRE,MARCA/CATEGORIA,MODELO/UBICACION_ALMACEN,ESTADO/STOCK,KM/STOCK_MIN,ITV_VENCIMIENTO,CERT_SANITARIO',
   ];
 
   ambulances.forEach((a) => {
@@ -413,7 +431,7 @@ export const exportFleetAndStockToCSV = (
 
   spareParts.forEach((p) => {
     lines.push(
-      `REPUESTO_TALLER,"${p.sku}","${p.name}","${p.category}","${p.locationInWorkshop}",${p.stockQuantity},${p.minStockAlert},"${p.supplier}",""`
+      `REPUESTO_ALMACEN,"${p.sku}","${p.name}","${p.category}","${p.warehouseLocation}",${p.stockQuantity},${p.minStockAlert},"${p.supplier}",""`
     );
   });
 

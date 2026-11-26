@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   Ambulance,
   AmbulanceStatus,
+  ExternalWorkshop,
   FleetChecklist,
   PreventiveSchedule,
   SparePart,
   StockMovement,
   StockMovementType,
+  UserRole,
   VehicleDocument,
   WorkOrder,
   WorkOrderStatus,
@@ -14,6 +16,7 @@ import {
 import {
   INITIAL_AMBULANCES,
   INITIAL_CHECKLISTS,
+  INITIAL_EXTERNAL_WORKSHOPS,
   INITIAL_PREVENTIVE_SCHEDULES,
   INITIAL_SPARE_PARTS,
   INITIAL_STOCK_MOVEMENTS,
@@ -24,6 +27,7 @@ import { FleetView } from './components/FleetView';
 import { PreventiveView } from './components/PreventiveView';
 import { ChecklistView } from './components/ChecklistView';
 import { WorkOrdersView } from './components/WorkOrdersView';
+import { WorkshopsView } from './components/WorkshopsView';
 import { PartsInventoryView } from './components/PartsInventoryView';
 import { exportFleetAndStockToCSV } from './utils/shareAndPrint';
 import {
@@ -44,6 +48,7 @@ import {
   CalendarClock,
   ClipboardCheck,
   Wrench,
+  Building2,
   Package,
   RotateCcw,
   Activity,
@@ -57,6 +62,7 @@ import {
   AlertTriangle,
   History,
   Cloud,
+  UserCheck,
 } from 'lucide-react';
 
 type ActiveTab =
@@ -65,18 +71,77 @@ type ActiveTab =
   | 'preventive'
   | 'checklist'
   | 'workorders'
+  | 'workshops'
   | 'parts';
 
+const normalizeAmbulanceStatus = (st: string): AmbulanceStatus => {
+  if (st === 'Disponible' || st === 'Activa') return 'Disponible';
+  if (st === 'En taller' || st === 'En Taller') return 'En taller';
+  return 'Fuera de servicio';
+};
+
+const normalizeWorkOrderStatus = (st: string): WorkOrderStatus => {
+  if (st === 'Reportada' || st === 'Pendiente') return 'Reportada';
+  if (st === 'Asignada' || st === 'En Diagnóstico' || st === 'Esperando Repuestos')
+    return 'Asignada';
+  if (st === 'En taller' || st === 'En Reparación') return 'En taller';
+  if (st === 'Reparada') return 'Reparada';
+  return 'Cerrada';
+};
+
 const hydrateAmbulancesWithFullFleet = (saved: Ambulance[]): Ambulance[] => {
-  // Si el usuario tenía las 5 ambulancias del demo inicial, completamos hasta las 21 unidades reales conservando sus cambios
   const byId = new Map<string, Ambulance>();
-  saved.forEach((a) => byId.set(a.id, { ...a, documents: ensureAmbulanceDocuments(a) }));
+  saved.forEach((a) =>
+    byId.set(a.id, {
+      ...a,
+      status: normalizeAmbulanceStatus(a.status),
+      documents: ensureAmbulanceDocuments(a),
+    })
+  );
   INITIAL_AMBULANCES.forEach((initAmb) => {
     if (!byId.has(initAmb.id) && saved.length <= 5) {
-      byId.set(initAmb.id, { ...initAmb, documents: ensureAmbulanceDocuments(initAmb) });
+      byId.set(initAmb.id, {
+        ...initAmb,
+        status: normalizeAmbulanceStatus(initAmb.status),
+        documents: ensureAmbulanceDocuments(initAmb),
+      });
     }
   });
   return Array.from(byId.values());
+};
+
+const hydrateWorkOrders = (saved: WorkOrder[]): WorkOrder[] => {
+  return saved.map((wo) => ({
+    ...wo,
+    code: wo.code.replace(/^OT-/, 'OR-'),
+    workshopId: wo.workshopId || 'ws-1',
+    status: normalizeWorkOrderStatus(wo.status),
+    entryDate: wo.entryDate || wo.createdAt,
+    workshopReport: wo.workshopReport || '',
+    warranty: wo.warranty || '6 meses en reparación',
+    partsUsed: (wo.partsUsed || []).map((p) => ({
+      partId: p.partId,
+      partName: p.partName,
+      sku: p.sku,
+      quantity: p.quantity,
+    })),
+  }));
+};
+
+const hydrateSpareParts = (saved: SparePart[]): SparePart[] => {
+  return saved.map((sp) => ({
+    id: sp.id,
+    sku: sp.sku,
+    name: sp.name,
+    category: sp.category,
+    compatibleModels: sp.compatibleModels,
+    stockQuantity: sp.stockQuantity,
+    minStockAlert: sp.minStockAlert,
+    warehouseLocation: sp.warehouseLocation || 'Almacén Central',
+    supplier: sp.supplier,
+    supplierContact: sp.supplierContact || 'Contacto proveedor',
+    isVehicleOnboardStandard: sp.isVehicleOnboardStandard,
+  }));
 };
 
 const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
@@ -85,11 +150,14 @@ const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
     const num = match ? parseInt(match[1], 10) : 0;
     return num > max ? num : max;
   }, 0);
-  return `OT-2026-${String(maxNum + 1).padStart(3, '0')}`;
+  return `OR-2026-${String(maxNum + 1).padStart(3, '0')}`;
 };
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [currentRole, setCurrentRole] = useState<UserRole>(() =>
+    safeLoadFromStorage<UserRole>(`${STORAGE_KEY}_role`, 'Encargado')
+  );
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -101,6 +169,13 @@ export function App() {
   const [ambulances, setAmbulances] = useState<Ambulance[]>(() =>
     hydrateAmbulancesWithFullFleet(
       safeLoadFromStorage(`${STORAGE_KEY}_ambulances`, INITIAL_AMBULANCES)
+    )
+  );
+
+  const [workshops, setWorkshops] = useState<ExternalWorkshop[]>(() =>
+    safeLoadFromStorage(
+      `${STORAGE_KEY}_workshops`,
+      INITIAL_EXTERNAL_WORKSHOPS
     )
   );
 
@@ -118,11 +193,15 @@ export function App() {
   );
 
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() =>
-    safeLoadFromStorage(`${STORAGE_KEY}_workorders`, INITIAL_WORK_ORDERS)
+    hydrateWorkOrders(
+      safeLoadFromStorage(`${STORAGE_KEY}_workorders`, INITIAL_WORK_ORDERS)
+    )
   );
 
   const [spareParts, setSpareParts] = useState<SparePart[]>(() =>
-    safeLoadFromStorage(`${STORAGE_KEY}_parts`, INITIAL_SPARE_PARTS)
+    hydrateSpareParts(
+      safeLoadFromStorage(`${STORAGE_KEY}_parts`, INITIAL_SPARE_PARTS)
+    )
   );
 
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(() =>
@@ -143,8 +222,16 @@ export function App() {
 
   // Persistencia automática, control de cuota y snapshot de backup automático en LocalStorage
   useEffect(() => {
+    safeSaveToStorage(`${STORAGE_KEY}_role`, currentRole);
+  }, [currentRole]);
+
+  useEffect(() => {
     safeSaveToStorage(`${STORAGE_KEY}_ambulances`, ambulances, () => setQuotaAlert(true));
   }, [ambulances]);
+
+  useEffect(() => {
+    safeSaveToStorage(`${STORAGE_KEY}_workshops`, workshops, () => setQuotaAlert(true));
+  }, [workshops]);
 
   useEffect(() => {
     safeSaveToStorage(`${STORAGE_KEY}_preventive`, preventiveSchedules, () => setQuotaAlert(true));
@@ -170,6 +257,7 @@ export function App() {
     saveAutoBackupSnapshot(
       {
         ambulances,
+        workshops,
         preventiveSchedules,
         checklists,
         workOrders,
@@ -181,6 +269,7 @@ export function App() {
     setStorageStats(getStorageUsageStats());
   }, [
     ambulances,
+    workshops,
     preventiveSchedules,
     checklists,
     workOrders,
@@ -403,10 +492,10 @@ export function App() {
 
     recordStockMovement(
       part,
-      'Reposición a Bordo Vehículo',
+      'Salida a vehículo',
       -actualToRestock,
       `Dotación a bordo ${amb.code} (${amb.plate})`,
-      'Taller / Almacén'
+      `${currentRole} de Flota`
     );
 
     setSpareParts((prev) =>
@@ -473,33 +562,33 @@ export function App() {
     const amb = ambulances.find((a) => a.id === sched.ambulanceId);
     if (!amb) return;
 
+    const today = new Date().toISOString().split('T')[0];
     const newWo: WorkOrder = {
       id: `wo-${Date.now()}`,
       code: getNextWorkOrderCode(workOrders),
       ambulanceId: amb.id,
+      workshopId: workshops[0]?.id || 'ws-1',
       type: 'Preventivo',
       priority: 'Alta',
-      status: 'Pendiente',
+      status: 'Asignada',
       title: `Mantenimiento Preventivo: ${sched.title}`,
       description: `Programado desde el plan preventivo (${sched.category}). ${
         sched.notes || ''
       }`,
-      reportedBy: 'Sistema de Alertas Preventivas',
-      assignedMechanic: 'Javier Ortega (Jefe de Taller)',
-      createdAt: new Date().toISOString().split('T')[0],
+      reportedBy: 'Plan Preventivo (Encargado de Vehículos)',
+      createdAt: today,
+      entryDate: today,
       mileageAtEntry: amb.mileage,
-      laborHours: 2.0,
-      laborHourlyRate: 48,
       partsUsed: [],
-      mechanicDiagnosis: '',
+      workshopReport: '',
+      warranty: '6 meses en mantenimiento preventivo',
     };
 
     setWorkOrders((prev) => [newWo, ...prev]);
-    handleUpdateAmbulanceStatus(amb.id, 'En Taller');
     setActiveTab('workorders');
   };
 
-  // --- Handlers Checklist Responsable de Flota ---
+  // --- Handlers Checklist / Incidencias ---
   const handleCreateWorkOrderFromChecklist = (chk: FleetChecklist) => {
     const amb = ambulances.find((a) => a.id === chk.ambulanceId);
     if (!amb) return;
@@ -515,33 +604,34 @@ export function App() {
             .join(', ')}`
         : '';
 
+    const today = new Date().toISOString().split('T')[0];
     const newWoId = `wo-${Date.now()}`;
     const newWo: WorkOrder = {
       id: newWoId,
       code: getNextWorkOrderCode(workOrders),
       ambulanceId: amb.id,
-      type: 'Inspección Responsable Flota',
+      workshopId: workshops[0]?.id || 'ws-1',
+      type: 'Incidencia / Checklist',
       priority:
         chk.overallUrgency === 'Inmovilización Inmediata'
           ? 'Crítica (Urgente)'
           : chk.overallUrgency === 'Prioritaria'
           ? 'Alta'
           : 'Media',
-      status: 'En Diagnóstico',
-      title: `Inspección Flota (${amb.code}): ${
+      status: 'En taller',
+      title: `Incidencia Flota (${amb.code}): ${
         faultItems.length > 0
           ? faultItems[0].label
-          : 'Reposición de Stock y Revisión General'
+          : 'Reposición de Stock y Revisión en Taller Externo'
       }`,
       description: `${chk.generalObservations}. Detalle puntos: ${faultSummary}${missingSummary}`,
       reportedBy: chk.inspectorName,
-      assignedMechanic: 'Javier Ortega (Jefe de Taller)',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: today,
+      entryDate: today,
       mileageAtEntry: chk.mileageAtInspection,
-      laborHours: 1.5,
-      laborHourlyRate: 48,
       partsUsed: [],
-      mechanicDiagnosis: '',
+      workshopReport: '',
+      warranty: '6 meses en reparación',
       sourceChecklistId: chk.id,
       photos: chk.photos,
       inspectorSignature: chk.inspectorSignature,
@@ -553,13 +643,13 @@ export function App() {
         c.id === chk.id
           ? {
               ...c,
-              workshopStatus: 'Orden de Trabajo Creada',
+              workshopStatus: 'Orden Externa Creada',
               linkedWorkOrderId: newWoId,
             }
           : c
       )
     );
-    handleUpdateAmbulanceStatus(amb.id, 'En Taller');
+    handleUpdateAmbulanceStatus(amb.id, 'En taller');
     setActiveTab('workorders');
   };
 
@@ -580,9 +670,9 @@ export function App() {
           ...a,
           mileage: Math.max(a.mileage, checklistData.mileageAtInspection),
           status: autoCreateWorkOrder
-            ? 'En Taller'
-            : checklistData.items.some((i) => i.status === 'Avería')
-            ? 'Revisión Pendiente'
+            ? 'En taller'
+            : checklistData.overallUrgency === 'Inmovilización Inmediata'
+            ? 'Fuera de servicio'
             : a.status,
           onboardParts: a.onboardParts.map((p) => ({
             ...p,
@@ -602,7 +692,25 @@ export function App() {
     }
   };
 
-  // --- Handlers Órdenes de Trabajo ---
+  // --- Handlers Talleres Externos ---
+  const handleAddWorkshop = (wsData: Omit<ExternalWorkshop, 'id'>) => {
+    setWorkshops((prev) => [
+      ...prev,
+      { ...wsData, id: `ws-${Date.now()}` },
+    ]);
+  };
+
+  const handleUpdateWorkshop = (updated: ExternalWorkshop) => {
+    setWorkshops((prev) =>
+      prev.map((w) => (w.id === updated.id ? updated : w))
+    );
+  };
+
+  const handleDeleteWorkshop = (id: string) => {
+    setWorkshops((prev) => prev.filter((w) => w.id !== id));
+  };
+
+  // --- Handlers Órdenes de Reparación Externas ---
   const handleCreateWorkOrder = (woData: Omit<WorkOrder, 'id' | 'code'>) => {
     const newWo: WorkOrder = {
       ...woData,
@@ -610,40 +718,49 @@ export function App() {
       code: getNextWorkOrderCode(workOrders),
     };
     setWorkOrders((prev) => [newWo, ...prev]);
-    handleUpdateAmbulanceStatus(woData.ambulanceId, 'En Taller');
+    if (woData.status === 'En taller') {
+      handleUpdateAmbulanceStatus(woData.ambulanceId, 'En taller');
+    }
   };
 
   const handleUpdateWorkOrderStatus = (woId: string, status: WorkOrderStatus) => {
     const wo = workOrders.find((w) => w.id === woId);
+    const today = new Date().toISOString().split('T')[0];
+
     setWorkOrders((prev) =>
       prev.map((w) =>
         w.id === woId
           ? {
               ...w,
               status,
+              exitDate:
+                (status === 'Reparada' || status === 'Cerrada') && !w.exitDate
+                  ? today
+                  : w.exitDate,
               completedAt:
-                status === 'Finalizada'
-                  ? new Date().toISOString().split('T')[0]
-                  : w.completedAt,
+                status === 'Cerrada' ? today : w.completedAt,
             }
           : w
       )
     );
 
-    if (wo && status === 'Finalizada') {
-      const today = new Date().toISOString().split('T')[0];
-      setAmbulances((prev) =>
-        prev.map((a) =>
-          a.id === wo.ambulanceId
-            ? {
-                ...a,
-                status: 'Activa',
-                lastServiceDate: today,
-                lastServiceMileage: a.mileage,
-              }
-            : a
-        )
-      );
+    if (wo) {
+      if (status === 'En taller') {
+        handleUpdateAmbulanceStatus(wo.ambulanceId, 'En taller');
+      } else if (status === 'Cerrada') {
+        setAmbulances((prev) =>
+          prev.map((a) =>
+            a.id === wo.ambulanceId
+              ? {
+                  ...a,
+                  status: 'Disponible',
+                  lastServiceDate: today,
+                  lastServiceMileage: a.mileage,
+                }
+              : a
+          )
+        );
+      }
     }
   };
 
@@ -662,13 +779,16 @@ export function App() {
       return;
     }
     const amb = ambulances.find((a) => a.id === wo.ambulanceId);
+    const ws = workshops.find((w) => w.id === wo.workshopId);
 
     recordStockMovement(
       part,
-      'Salida a Orden de Taller',
+      'Salida a reparación',
       -quantity,
-      `${amb?.code || ''} (${amb?.plate || ''}) • ${wo.code}`,
-      wo.assignedMechanic
+      `${amb?.code || ''} (${amb?.plate || ''}) • ${wo.code} (${
+        ws?.name || 'Taller Externo'
+      })`,
+      `${currentRole} de Flota`
     );
 
     setSpareParts((prev) =>
@@ -691,7 +811,6 @@ export function App() {
                   partName: part.name,
                   sku: part.sku,
                   quantity,
-                  unitCost: part.unitCost,
                 },
               ],
             }
@@ -711,10 +830,10 @@ export function App() {
     if (part) {
       recordStockMovement(
         part,
-        'Ajuste Manual Almacén',
+        'Ajuste',
         removedEntry.quantity,
         `Devolución desde ${wo.code} (${amb?.code || ''})`,
-        wo.assignedMechanic
+        `${currentRole} de Flota`
       );
       setSpareParts((prev) =>
         prev.map((p) =>
@@ -739,19 +858,25 @@ export function App() {
 
   const handleUpdateWorkOrderDetails = (
     woId: string,
-    laborHours: number,
-    mechanicDiagnosis: string
+    patch: Partial<
+      Pick<
+        WorkOrder,
+        | 'workshopId'
+        | 'entryDate'
+        | 'exitDate'
+        | 'workshopReport'
+        | 'warranty'
+      >
+    >
   ) => {
     setWorkOrders((prev) =>
-      prev.map((wo) =>
-        wo.id === woId ? { ...wo, laborHours, mechanicDiagnosis } : wo
-      )
+      prev.map((wo) => (wo.id === woId ? { ...wo, ...patch } : wo))
     );
   };
 
   const handleUpdateWorkOrderSignatureAndPhotos = (
     woId: string,
-    mechanicSignature?: string,
+    workshopConformitySignature?: string,
     newPhotoUrl?: string
   ) => {
     setWorkOrders((prev) =>
@@ -759,10 +884,10 @@ export function App() {
         if (wo.id !== woId) return wo;
         return {
           ...wo,
-          mechanicSignature:
-            mechanicSignature !== undefined
-              ? mechanicSignature || undefined
-              : wo.mechanicSignature,
+          workshopConformitySignature:
+            workshopConformitySignature !== undefined
+              ? workshopConformitySignature || undefined
+              : wo.workshopConformitySignature,
           photos: newPhotoUrl
             ? [...(wo.photos || []), newPhotoUrl]
             : wo.photos,
@@ -784,10 +909,10 @@ export function App() {
     if (part) {
       recordStockMovement(
         part,
-        'Ajuste Manual Almacén',
+        'Ajuste',
         delta,
-        `Almacén (${part.locationInWorkshop})`,
-        'Jefe de Almacén / Taller'
+        `Almacén (${part.warehouseLocation})`,
+        `${currentRole} de Flota`
       );
     }
     setSpareParts((prev) =>
@@ -804,10 +929,10 @@ export function App() {
     if (!part) return;
     recordStockMovement(
       part,
-      'Entrada Pedido Proveedor',
+      'Entrada',
       quantityToAdd,
       `Recepción Proveedor: ${part.supplier}`,
-      'Recepción Almacén'
+      `${currentRole} de Flota`
     );
     setSpareParts((prev) =>
       prev.map((p) =>
@@ -818,12 +943,12 @@ export function App() {
     );
   };
 
-  // --- Exportar / Importar Copia de Seguridad JSON (Sincronizar Móvil y PC - 1.3) ---
   const handleDownloadJsonBackup = () => {
     const payload = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       ambulances,
+      workshops,
       preventiveSchedules,
       checklists,
       workOrders,
@@ -850,12 +975,14 @@ export function App() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string);
-        if (data.ambulances) setAmbulances(data.ambulances);
+        if (data.ambulances)
+          setAmbulances(hydrateAmbulancesWithFullFleet(data.ambulances));
+        if (data.workshops) setWorkshops(data.workshops);
         if (data.preventiveSchedules)
           setPreventiveSchedules(data.preventiveSchedules);
         if (data.checklists) setChecklists(data.checklists);
-        if (data.workOrders) setWorkOrders(data.workOrders);
-        if (data.spareParts) setSpareParts(data.spareParts);
+        if (data.workOrders) setWorkOrders(hydrateWorkOrders(data.workOrders));
+        if (data.spareParts) setSpareParts(hydrateSpareParts(data.spareParts));
         if (data.stockMovements) setStockMovements(data.stockMovements);
         setShowBackupModal(false);
       } catch {
@@ -868,6 +995,7 @@ export function App() {
   const handleRestoreAutoBackup = () => {
     const snap = loadAutoBackupSnapshot<{
       ambulances?: Ambulance[];
+      workshops?: ExternalWorkshop[];
       preventiveSchedules?: PreventiveSchedule[];
       checklists?: FleetChecklist[];
       workOrders?: WorkOrder[];
@@ -879,18 +1007,23 @@ export function App() {
       return;
     }
     const { payload } = snap;
-    if (payload.ambulances) setAmbulances(payload.ambulances);
+    if (payload.ambulances)
+      setAmbulances(hydrateAmbulancesWithFullFleet(payload.ambulances));
+    if (payload.workshops) setWorkshops(payload.workshops);
     if (payload.preventiveSchedules)
       setPreventiveSchedules(payload.preventiveSchedules);
     if (payload.checklists) setChecklists(payload.checklists);
-    if (payload.workOrders) setWorkOrders(payload.workOrders);
-    if (payload.spareParts) setSpareParts(payload.spareParts);
+    if (payload.workOrders)
+      setWorkOrders(hydrateWorkOrders(payload.workOrders));
+    if (payload.spareParts)
+      setSpareParts(hydrateSpareParts(payload.spareParts));
     if (payload.stockMovements) setStockMovements(payload.stockMovements);
     setShowBackupModal(false);
   };
 
   const handleResetDemoData = () => {
     localStorage.removeItem(`${STORAGE_KEY}_ambulances`);
+    localStorage.removeItem(`${STORAGE_KEY}_workshops`);
     localStorage.removeItem(`${STORAGE_KEY}_preventive`);
     localStorage.removeItem(`${STORAGE_KEY}_checklists`);
     localStorage.removeItem(`${STORAGE_KEY}_workorders`);
@@ -902,6 +1035,7 @@ export function App() {
         documents: ensureAmbulanceDocuments(a),
       }))
     );
+    setWorkshops(INITIAL_EXTERNAL_WORKSHOPS);
     setPreventiveSchedules(INITIAL_PREVENTIVE_SCHEDULES);
     setChecklists(INITIAL_CHECKLISTS);
     setWorkOrders(INITIAL_WORK_ORDERS);
@@ -909,56 +1043,72 @@ export function App() {
     setStockMovements(INITIAL_STOCK_MOVEMENTS);
   };
 
-  const navItems: {
+  const allNavItems: {
     id: ActiveTab;
     label: string;
     shortLabel: string;
     icon: React.ReactNode;
     badge?: number;
+    encargadoOnly?: boolean;
   }[] = [
     {
       id: 'dashboard',
-      label: 'Panel General',
+      label: 'Panel / Disponibilidad',
       shortLabel: 'Inicio',
       icon: <LayoutDashboard className="w-4 h-4" />,
     },
     {
       id: 'fleet',
-      label: 'Flota y Stock Vehículo',
+      label: 'Flota (21) y Documentos',
       shortLabel: 'Flota',
       icon: <Truck className="w-4 h-4" />,
       badge: ambulances.length,
     },
     {
       id: 'checklist',
-      label: 'Checklist Resp. Flota',
-      shortLabel: 'Checklist',
+      label: 'Incidencias y Checklists',
+      shortLabel: 'Incidencias',
       icon: <ClipboardCheck className="w-4 h-4" />,
       badge: checklists.filter(
-        (c) => c.workshopStatus === 'Pendiente de Revisión Taller'
+        (c) => c.workshopStatus === 'Pendiente de Asignar Taller'
       ).length,
     },
     {
       id: 'workorders',
-      label: 'Órdenes de Taller (OT)',
-      shortLabel: 'Taller OT',
+      label: 'Órdenes Externas',
+      shortLabel: 'Órdenes',
       icon: <Wrench className="w-4 h-4" />,
-      badge: workOrders.filter((w) => w.status !== 'Finalizada').length,
+      badge: workOrders.filter((w) => w.status !== 'Cerrada').length,
+      encargadoOnly: true,
+    },
+    {
+      id: 'workshops',
+      label: 'Talleres Externos',
+      shortLabel: 'Talleres',
+      icon: <Building2 className="w-4 h-4" />,
+      badge: workshops.length,
+      encargadoOnly: true,
     },
     {
       id: 'preventive',
       label: 'Mantenimiento Preventivo',
       shortLabel: 'Preventivo',
       icon: <CalendarClock className="w-4 h-4" />,
+      encargadoOnly: true,
     },
     {
       id: 'parts',
-      label: 'Inventario de Repuestos',
+      label: 'Stock de Repuestos',
       shortLabel: 'Stock',
       icon: <Package className="w-4 h-4" />,
       badge: spareParts.filter((p) => p.stockQuantity <= p.minStockAlert).length,
     },
   ];
+
+  const navItems =
+    currentRole === 'Encargado'
+      ? allNavItems
+      : allNavItems.filter((item) => !item.encargadoOnly);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col pb-20 md:pb-6">
@@ -972,20 +1122,47 @@ export function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base sm:text-lg font-extrabold tracking-tight">
-                  AmbuFleet <span className="text-rose-400">Mecánica</span>
+                  AmbuFleet <span className="text-rose-400">Flota</span>
                 </h1>
                 <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                  Gestión de Taller y Flota Sanitaria
+                  Gestión de 21 Ambulancias y Talleres Externos
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 line-clamp-1">
-                Checklists con voz y fotos, WhatsApp a taller, vencimientos ITV y
-                stock
+                Disponibilidad, vencimientos 30/15/7d, órdenes a talleres externos y stock propio
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Selector de Rol: Encargado (todo) / Operador (flota, incidencias, stock, checklists) */}
+            <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs">
+              <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <select
+                value={currentRole}
+                onChange={(e) => {
+                  const nextRole = e.target.value as UserRole;
+                  setCurrentRole(nextRole);
+                  if (
+                    nextRole === 'Operador' &&
+                    (activeTab === 'workorders' ||
+                      activeTab === 'workshops' ||
+                      activeTab === 'preventive')
+                  ) {
+                    setActiveTab('dashboard');
+                  }
+                }}
+                aria-label="Seleccionar rol de usuario"
+                className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+              >
+                <option value="Encargado" className="text-slate-900">
+                  Rol: Encargado
+                </option>
+                <option value="Operador" className="text-slate-900">
+                  Rol: Operador
+                </option>
+              </select>
+            </div>
             <span
               title={
                 isOnline
@@ -1071,7 +1248,11 @@ export function App() {
       </header>
 
       {/* Bottom Navigation Bar (Móvil y Tablet Vertical) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 z-50 px-1 py-1.5 grid grid-cols-6 gap-0.5 shadow-2xl">
+      <nav
+        className={`md:hidden fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 z-50 px-1 py-1.5 grid gap-0.5 shadow-2xl ${
+          navItems.length <= 4 ? 'grid-cols-4' : 'grid-cols-7'
+        }`}
+      >
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           return (
@@ -1194,6 +1375,7 @@ export function App() {
         {activeTab === 'workorders' && (
           <WorkOrdersView
             ambulances={ambulances}
+            workshops={workshops}
             workOrders={workOrders}
             spareParts={spareParts}
             onCreateWorkOrder={handleCreateWorkOrder}
@@ -1204,6 +1386,18 @@ export function App() {
             onUpdateWorkOrderSignatureAndPhotos={
               handleUpdateWorkOrderSignatureAndPhotos
             }
+          />
+        )}
+
+        {activeTab === 'workshops' && (
+          <WorkshopsView
+            workshops={workshops}
+            workOrders={workOrders}
+            ambulances={ambulances}
+            currentRole={currentRole}
+            onAddWorkshop={handleAddWorkshop}
+            onUpdateWorkshop={handleUpdateWorkshop}
+            onDeleteWorkshop={handleDeleteWorkshop}
           />
         )}
 

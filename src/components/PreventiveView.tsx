@@ -39,7 +39,6 @@ export const PreventiveView: React.FC<PreventiveViewProps> = ({
     intervalKm: 15000,
     nextDueKm: 130000,
     nextDueDate: '2027-03-15',
-    estimatedCost: 190,
     notes: '',
   });
 
@@ -215,7 +214,7 @@ export const PreventiveView: React.FC<PreventiveViewProps> = ({
                     className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold flex items-center gap-1.5 transition"
                   >
                     <Wrench className="w-3.5 h-3.5" />
-                    Enviar a Taller (OT)
+                    Enviar a Taller Externo (OR)
                   </button>
                   <button
                     onClick={() => onCompletePreventive(sched.id)}

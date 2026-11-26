@@ -29,7 +29,16 @@ interface DashboardViewProps {
   checklists: FleetChecklist[];
   workOrders: WorkOrder[];
   spareParts: SparePart[];
-  onNavigate: (tab: 'dashboard' | 'fleet' | 'preventive' | 'checklist' | 'workorders' | 'parts') => void;
+  onNavigate: (
+    tab:
+      | 'dashboard'
+      | 'fleet'
+      | 'preventive'
+      | 'checklist'
+      | 'workorders'
+      | 'workshops'
+      | 'parts'
+  ) => void;
   onCreateWorkOrderFromChecklist: (checklist: FleetChecklist) => void;
 }
 
@@ -42,14 +51,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
   onCreateWorkOrderFromChecklist,
 }) => {
-  const activeCount = ambulances.filter((a) => a.status === 'Activa').length;
-  const workshopCount = ambulances.filter((a) => a.status === 'En Taller').length;
-  const pendingReviewCount = ambulances.filter(
-    (a) => a.status === 'Revisión Pendiente' || a.status === 'Fuera de Servicio'
+  const availableCount = ambulances.filter((a) => a.status === 'Disponible').length;
+  const workshopCount = ambulances.filter((a) => a.status === 'En taller').length;
+  const outOfServiceCount = ambulances.filter(
+    (a) => a.status === 'Fuera de servicio'
   ).length;
 
-  const openWorkOrders = workOrders.filter((w) => w.status !== 'Finalizada');
-  const pendingChecklists = checklists.filter((c) => c.workshopStatus === 'Pendiente de Revisión Taller');
+  const openWorkOrders = workOrders.filter((w) => w.status !== 'Cerrada');
+  const pendingChecklists = checklists.filter(
+    (c) => c.workshopStatus === 'Pendiente de Asignar Taller'
+  );
   const lowStockParts = spareParts.filter((p) => p.stockQuantity <= p.minStockAlert);
 
   // Calcular alertas de vencimientos documentales (ITV, Seguro, Cert. Técnico-Sanitario, Tacógrafo, Ficha Técnica) a 30/15/7 días y vencidos
@@ -97,9 +108,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     })
     .filter((item): item is NonNullable<typeof item> => item !== null && item.status !== 'ok');
 
-  // Órdenes finalizadas y urgentes
+  // Órdenes cerradas y urgentes
   const completedWorkOrdersCount = workOrders.filter(
-    (w) => w.status === 'Finalizada'
+    (w) => w.status === 'Cerrada'
   ).length;
   const criticalWorkOrdersCount = openWorkOrders.filter(
     (w) => w.priority === 'Crítica (Urgente)' || w.priority === 'Alta'
@@ -121,25 +132,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Disponibilidad de Flota
+                Disponibilidad de Flota ({ambulances.length})
               </p>
               <p className="text-2xl font-bold text-slate-900 mt-1">
-                {activeCount} / {ambulances.length} Activas
+                {availableCount} / {ambulances.length} Disponibles
               </p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <Truck className="w-6 h-6" />
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-3 text-xs font-medium">
-            <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium">
+            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
               {workshopCount} en taller
             </span>
-            {pendingReviewCount > 0 && (
-              <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
-                {pendingReviewCount} rev. pendiente
-              </span>
-            )}
+            <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full">
+              {outOfServiceCount} fuera de servicio
+            </span>
           </div>
         </div>
 
@@ -150,10 +159,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Partes del Resp. de Flota
+                Incidencias / Checklists
               </p>
               <p className="text-2xl font-bold text-slate-900 mt-1">
-                {pendingChecklists.length} Pendientes
+                {pendingChecklists.length} Sin Asignar
               </p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -161,8 +170,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            {checklists.length} checklists registrados •{' '}
-            <span className="text-blue-600 font-medium">Informes a taller</span>
+            {checklists.length} partes registrados •{' '}
+            <span className="text-blue-600 font-medium">Generan orden externa</span>
           </p>
         </div>
 
@@ -173,7 +182,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Órdenes de Taller (OT)
+                Órdenes Externas (Talleres)
               </p>
               <p className="text-2xl font-bold text-slate-900 mt-1">
                 {openWorkOrders.length} Abiertas
@@ -186,7 +195,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="mt-3 text-xs text-slate-500">
             {criticalWorkOrdersCount} prioritarias •{' '}
             <span className="font-semibold text-emerald-700">
-              {completedWorkOrdersCount} finalizadas
+              {completedWorkOrdersCount} cerradas
             </span>
           </p>
         </div>
@@ -370,13 +379,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         )}
                       </div>
 
-                      {chk.workshopStatus === 'Pendiente de Revisión Taller' ? (
+                      {chk.workshopStatus === 'Pendiente de Asignar Taller' ? (
                         <button
                           onClick={() => onCreateWorkOrderFromChecklist(chk)}
                           className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition flex items-center gap-1.5"
                         >
                           <Wrench className="w-3.5 h-3.5" />
-                          Abrir Orden de Taller
+                          Crear Orden Externa
                         </button>
                       ) : (
                         <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md flex items-center gap-1">
@@ -514,18 +523,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td className="py-3 px-4">
                       <span
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          amb.status === 'Activa'
+                          amb.status === 'Disponible'
                             ? 'bg-emerald-100 text-emerald-800'
-                            : amb.status === 'En Taller'
+                            : amb.status === 'En taller'
                             ? 'bg-amber-100 text-amber-800'
                             : 'bg-rose-100 text-rose-800'
                         }`}
                       >
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${
-                            amb.status === 'Activa'
+                            amb.status === 'Disponible'
                               ? 'bg-emerald-600'
-                              : amb.status === 'En Taller'
+                              : amb.status === 'En taller'
                               ? 'bg-amber-600'
                               : 'bg-rose-600'
                           }`}

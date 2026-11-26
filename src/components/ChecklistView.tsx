@@ -197,9 +197,9 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
             ? 'Inspección del responsable de flota con incidencias mecánicas/stock para taller.'
             : 'Inspección periódica sin anomalías.'),
         workshopStatus: autoGenerateOT
-          ? 'Orden de Trabajo Creada'
+          ? 'Orden Externa Creada'
           : hasFaultsOrMissing
-          ? 'Pendiente de Revisión Taller'
+          ? 'Pendiente de Asignar Taller'
           : 'Archivada / OK',
         photos: allPhotos,
         inspectorSignature: inspectorSignature || undefined,
@@ -777,13 +777,13 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                       <Printer className="w-3.5 h-3.5" />
                       PDF / Imprimir
                     </button>
-                    {chk.workshopStatus === 'Pendiente de Revisión Taller' ? (
+                    {chk.workshopStatus === 'Pendiente de Asignar Taller' ? (
                       <button
                         onClick={() => onCreateWorkOrderFromChecklist(chk)}
                         className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
                       >
                         <Wrench className="w-3.5 h-3.5" />
-                        Convertir en OT
+                        Crear Orden Externa
                       </button>
                     ) : (
                       <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold inline-flex items-center gap-1.5">

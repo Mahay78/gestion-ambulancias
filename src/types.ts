@@ -1,4 +1,6 @@
-export type AmbulanceStatus = 'Activa' | 'En Taller' | 'Fuera de Servicio' | 'Revisión Pendiente';
+export type UserRole = 'Encargado' | 'Operador';
+
+export type AmbulanceStatus = 'Disponible' | 'En taller' | 'Fuera de servicio';
 export type AmbulanceType = 'SVA (UVI Móvil)' | 'SVB (Soporte Vital Básico)' | 'TNA (Transporte No Asistido)';
 
 export type DocumentType =
@@ -70,7 +72,6 @@ export interface PreventiveSchedule {
   intervalMonths?: number;
   lastDoneDate: string;
   nextDueDate?: string;
-  estimatedCost: number;
   notes?: string;
 }
 
@@ -102,46 +103,75 @@ export interface FleetChecklist {
   items: ChecklistItem[];
   missingParts: MissingVehiclePartReport[];
   generalObservations: string;
-  workshopStatus: 'Pendiente de Revisión Taller' | 'Orden de Trabajo Creada' | 'Archivada / OK';
+  workshopStatus: 'Pendiente de Asignar Taller' | 'Orden Externa Creada' | 'Archivada / OK';
   linkedWorkOrderId?: string;
   photos?: string[];
   inspectorSignature?: string;
 }
 
-export type WorkOrderStatus = 'Pendiente' | 'En Diagnóstico' | 'Esperando Repuestos' | 'En Reparación' | 'Finalizada';
+export type WorkshopSpecialty =
+  | 'Mecánica General'
+  | 'Electricidad y Prioritarios'
+  | 'Carrozado Sanitario'
+  | 'Neumáticos y Frenos'
+  | 'Chapa y Pintura'
+  | 'Servicio Oficial Marca';
+
+export interface ExternalWorkshop {
+  id: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  specialty: WorkshopSpecialty;
+  zone: string;
+  notes: string;
+}
+
+export type WorkOrderStatus =
+  | 'Reportada'
+  | 'Asignada'
+  | 'En taller'
+  | 'Reparada'
+  | 'Cerrada';
+
 export type WorkOrderPriority = 'Baja' | 'Media' | 'Alta' | 'Crítica (Urgente)';
-export type WorkOrderType = 'Correctivo (Avería)' | 'Preventivo' | 'Inspección Responsable Flota' | 'ITV / Pre-ITV';
+export type WorkOrderType =
+  | 'Correctivo (Avería)'
+  | 'Preventivo'
+  | 'Incidencia / Checklist'
+  | 'ITV / Pre-ITV';
 
 export interface WorkOrderPartUsed {
   partId: string;
   partName: string;
   sku: string;
   quantity: number;
-  unitCost: number;
 }
 
 export interface WorkOrder {
   id: string;
   code: string;
   ambulanceId: string;
+  workshopId: string; // Taller externo asignado
   type: WorkOrderType;
   priority: WorkOrderPriority;
   status: WorkOrderStatus;
-  title: string;
+  title: string; // Motivo principal
   description: string;
   reportedBy: string;
-  assignedMechanic: string;
   createdAt: string;
+  entryDate: string; // Fecha entrada al taller externo (YYYY-MM-DD)
+  exitDate?: string; // Fecha salida del taller externo (YYYY-MM-DD)
   completedAt?: string;
   mileageAtEntry: number;
-  laborHours: number;
-  laborHourlyRate: number;
-  partsUsed: WorkOrderPartUsed[];
-  mechanicDiagnosis: string;
+  partsUsed: WorkOrderPartUsed[]; // Repuestos propios suministrados al taller externo (sin importe)
+  workshopReport: string; // Informe de reparación del taller externo
+  warranty: string; // Garantía de la reparación (ej. "6 meses / 15.000 km")
   sourceChecklistId?: string;
   photos?: string[];
   inspectorSignature?: string;
-  mechanicSignature?: string;
+  workshopConformitySignature?: string;
 }
 
 export type PartCategory =
@@ -161,17 +191,17 @@ export interface SparePart {
   compatibleModels: string[];
   stockQuantity: number;
   minStockAlert: number;
-  unitCost: number;
-  locationInWorkshop: string;
+  warehouseLocation: string; // Ubicación simple de almacén propio
   supplier: string;
+  supplierContact?: string;
   isVehicleOnboardStandard: boolean;
 }
 
 export type StockMovementType =
-  | 'Salida a Orden de Taller'
-  | 'Reposición a Bordo Vehículo'
-  | 'Entrada Pedido Proveedor'
-  | 'Ajuste Manual Almacén';
+  | 'Salida a reparación'
+  | 'Salida a vehículo'
+  | 'Entrada'
+  | 'Ajuste';
 
 export interface StockMovement {
   id: string;
@@ -181,6 +211,7 @@ export interface StockMovement {
   sku: string;
   type: StockMovementType;
   quantityChange: number; // negativo para salidas, positivo para entradas
-  targetReference: string; // ej. "AMB-02 (9104-KTR) • OT-2026-001"
+  targetReference: string; // Destino (ej. "AMB-02 • OR-2026-001 (Talleres DieselSur)")
+  notes?: string;
   performedBy: string;
 }
