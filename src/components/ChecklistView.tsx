@@ -14,6 +14,7 @@ import {
   shareChecklistViaWhatsApp,
   printChecklistReport,
 } from '../utils/shareAndPrint';
+import { compressImageFile } from '../utils/imageCompression';
 import {
   ClipboardCheck,
   Wrench,
@@ -42,42 +43,6 @@ interface ChecklistViewProps {
   ) => void;
   onCreateWorkOrderFromChecklist: (checklist: FleetChecklist) => void;
 }
-
-// Utilidad para comprimir fotos tomadas con la cámara del móvil/tablet (optimizada para cuota de LocalStorage)
-const compressImageFile = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 640;
-        let width = img.width;
-        let height = img.height;
-        if (width > height && width > maxDim) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
-        } else if (height > maxDim) {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.62));
-        } else {
-          resolve(ev.target?.result as string);
-        }
-      };
-      img.onerror = reject;
-      img.src = ev.target?.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
 
 export const ChecklistView: React.FC<ChecklistViewProps> = ({
   ambulances,

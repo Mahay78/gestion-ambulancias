@@ -4,8 +4,15 @@ import {
   AmbulanceStatus,
   AmbulanceType,
   SparePart,
+  VehicleDocument,
   WorkOrder,
 } from '../types';
+import {
+  ensureAmbulanceDocuments,
+  calculateDaysRemaining,
+  getExpiryBadgeMeta,
+} from '../utils/expiryAlerts';
+import { compressImageFile } from '../utils/imageCompression';
 import {
   Plus,
   Gauge,
@@ -18,6 +25,9 @@ import {
   Trash2,
   PackagePlus,
   ScanLine,
+  FileText,
+  Upload,
+  Eye,
 } from 'lucide-react';
 import { PlateScannerModal } from './PlateScannerModal';
 
@@ -35,6 +45,7 @@ interface FleetViewProps {
     sanitaryCertExpiry: string,
     insuranceExpiry: string
   ) => void;
+  onUpdateVehicleDocument?: (ambulanceId: string, doc: VehicleDocument) => void;
   onRestockVehiclePart: (ambulanceId: string, partId: string) => void;
   onUpdateVehiclePartQty: (
     ambulanceId: string,
@@ -60,6 +71,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
   onUpdateStatus,
   onUpdateMileage,
   onUpdateLegalDates,
+  onUpdateVehicleDocument,
   onRestockVehiclePart,
   onUpdateVehiclePartQty,
   onAddPartToVehicleOnboard,
@@ -71,6 +83,9 @@ export const FleetView: React.FC<FleetViewProps> = ({
   const [showPlateScanner, setShowPlateScanner] = useState(false);
   const [confirmDeleteAmb, setConfirmDeleteAmb] = useState<Ambulance | null>(null);
   const [mileageInput, setMileageInput] = useState<string>('');
+  const [previewDocFile, setPreviewDocFile] = useState<{ title: string; url: string } | null>(
+    null
+  );
 
   // Estado para añadir nueva pieza a la dotación del vehículo seleccionado
   const [newOnboardPartId, setNewOnboardPartId] = useState<string>(
@@ -447,38 +462,28 @@ export const FleetView: React.FC<FleetViewProps> = ({
 
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
                     <span className="text-xs text-slate-500 block">
-                      Resumen Semáforo Legal
+                      Resumen Semáforo Documental (30/15/7d)
                     </span>
                     {(() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      const getDays = (d: string) =>
-                        Math.ceil(
-                          (new Date(d).getTime() - new Date(today).getTime()) /
-                            (1000 * 3600 * 24)
-                        );
-                      const dItv = getDays(selectedAmb.itvExpiry);
-                      const dSan = getDays(selectedAmb.sanitaryCertExpiry);
-                      const dIns = getDays(selectedAmb.insuranceExpiry);
-                      const minD = Math.min(dItv, dSan, dIns);
+                      const docs = ensureAmbulanceDocuments(selectedAmb);
+                      const daysList = docs.map((d) =>
+                        calculateDaysRemaining(d.expiryDate)
+                      );
+                      const minD = Math.min(...daysList);
+                      const meta = getExpiryBadgeMeta(minD);
                       return (
                         <div className="mt-1.5 space-y-1 text-xs">
                           <span
-                            className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
-                              minD < 0
-                                ? 'bg-rose-600 text-white'
-                                : minD <= 30
-                                ? 'bg-amber-500 text-white'
-                                : 'bg-emerald-600 text-white'
-                            }`}
+                            className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${meta.badgeClass}`}
                           >
                             {minD < 0
-                              ? 'DOCUMENTACIÓN VENCIDA'
+                              ? `DOCUMENTO VENCIDO (${Math.abs(minD)}d)`
                               : minD <= 30
-                              ? `PRÓXIMO VENCIMIENTO (${minD}d)`
-                              : 'DOCUMENTACIÓN EN REGLA'}
+                              ? `ALERTA VENCIMIENTO: ${meta.label}`
+                              : '5 DOCUMENTOS EN REGLA'}
                           </span>
                           <p className="text-[11px] text-slate-500">
-                            ITV ({dItv}d) • Sanitario ({dSan}d) • Seguro ({dIns}d)
+                            ITV, Seguro, Técnico-Sanitario, Tacógrafo y Ficha Técnica
                           </p>
                         </div>
                       );
@@ -486,117 +491,167 @@ export const FleetView: React.FC<FleetViewProps> = ({
                   </div>
                 </div>
 
-                {/* Semáforo de Caducidades Legales (ITV, Certificación Técnico-Sanitaria y Seguro) */}
+                {/* Documentación y Vencimientos (5 Documentos Reglamentarios con Alertas 30/15/7 días y Vencidos) */}
                 <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Semáforo de Caducidades Legales (ITV, Cert. Técnico-Sanitario y Seguro)
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      Documentación y Vencimientos (ITV, Seguro, Técnico-Sanitario, Tacógrafo, Ficha Técnica)
                     </h3>
                     <span className="text-[11px] text-slate-500">
-                      Alerta automática a los 30 días • Editable y renovable en 1 clic
+                      Alertas: 30d (Ámbar) • 15d (Naranja) • 7d (Rojo) • Vencido
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                    {[
-                      {
-                        key: 'itv' as const,
-                        label: 'ITV Ambulancia',
-                        dateVal: selectedAmb.itvExpiry,
-                        renewMonths: 6,
-                        renewLabel: '+6 meses',
-                      },
-                      {
-                        key: 'sanitary' as const,
-                        label: 'Certificación Técnico-Sanitaria',
-                        dateVal: selectedAmb.sanitaryCertExpiry,
-                        renewMonths: 12,
-                        renewLabel: '+1 año',
-                      },
-                      {
-                        key: 'insurance' as const,
-                        label: 'Póliza de Seguro',
-                        dateVal: selectedAmb.insuranceExpiry,
-                        renewMonths: 12,
-                        renewLabel: '+1 año',
-                      },
-                    ].map((doc) => {
-                      const today = new Date().toISOString().split('T')[0];
-                      const diffDays = Math.ceil(
-                        (new Date(doc.dateVal).getTime() -
-                          new Date(today).getTime()) /
-                          (1000 * 3600 * 24)
-                      );
-                      const isOverdue = diffDays < 0;
-                      const isSoon = diffDays >= 0 && diffDays <= 30;
+                  <div className="space-y-2.5 text-xs">
+                    {ensureAmbulanceDocuments(selectedAmb).map((doc) => {
+                      const diffDays = calculateDaysRemaining(doc.expiryDate);
+                      const meta = getExpiryBadgeMeta(diffDays);
+                      const renewMonths = doc.type === 'ITV' ? 6 : doc.type === 'Tacógrafo' ? 24 : 12;
 
-                      const handleDateChange = (newDate: string) => {
-                        onUpdateLegalDates(
-                          selectedAmb.id,
-                          doc.key === 'itv' ? newDate : selectedAmb.itvExpiry,
-                          doc.key === 'sanitary'
-                            ? newDate
-                            : selectedAmb.sanitaryCertExpiry,
-                          doc.key === 'insurance'
-                            ? newDate
-                            : selectedAmb.insuranceExpiry
-                        );
+                      const updateDocField = (patch: Partial<VehicleDocument>) => {
+                        const updated: VehicleDocument = { ...doc, ...patch };
+                        if (onUpdateVehicleDocument) {
+                          onUpdateVehicleDocument(selectedAmb.id, updated);
+                        } else if (patch.expiryDate) {
+                          onUpdateLegalDates(
+                            selectedAmb.id,
+                            doc.type === 'ITV' ? patch.expiryDate : selectedAmb.itvExpiry,
+                            doc.type === 'Certificado Técnico-Sanitario'
+                              ? patch.expiryDate
+                              : selectedAmb.sanitaryCertExpiry,
+                            doc.type === 'Seguro'
+                              ? patch.expiryDate
+                              : selectedAmb.insuranceExpiry
+                          );
+                        }
                       };
 
                       const handleQuickRenew = () => {
+                        const todayStr = new Date().toISOString().split('T')[0];
                         const base =
-                          diffDays < 0 ? new Date() : new Date(doc.dateVal);
-                        base.setMonth(base.getMonth() + doc.renewMonths);
-                        handleDateChange(base.toISOString().split('T')[0]);
+                          diffDays < 0 ? new Date() : new Date(`${doc.expiryDate}T00:00:00`);
+                        base.setMonth(base.getMonth() + renewMonths);
+                        updateDocField({
+                          issueDate: todayStr,
+                          expiryDate: base.toISOString().split('T')[0],
+                        });
+                      };
+
+                      const handleFileUpload = async (
+                        e: React.ChangeEvent<HTMLInputElement>
+                      ) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const compressed = await compressImageFile(file, 800, 0.65);
+                          updateDocField({
+                            fileName: file.name,
+                            fileDataUrl: compressed,
+                          });
+                        } catch (err) {
+                          alert(
+                            err instanceof Error
+                              ? err.message
+                              : 'No se pudo adjuntar el archivo.'
+                          );
+                        }
                       };
 
                       return (
                         <div
-                          key={doc.key}
-                          className={`p-3 rounded-xl border ${
-                            isOverdue
-                              ? 'bg-rose-50 border-rose-300'
-                              : isSoon
-                              ? 'bg-amber-50 border-amber-300'
-                              : 'bg-white border-slate-200'
-                          }`}
+                          key={doc.type}
+                          className={`p-3 rounded-xl border ${meta.cardClass}`}
                         >
-                          <div className="flex items-center justify-between gap-1 mb-1.5">
-                            <span className="font-bold text-slate-800">
-                              {doc.label}
-                            </span>
-                            <span
-                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                isOverdue
-                                  ? 'bg-rose-600 text-white'
-                                  : isSoon
-                                  ? 'bg-amber-500 text-white'
-                                  : 'bg-emerald-100 text-emerald-800'
-                              }`}
-                            >
-                              {isOverdue
-                                ? `VENCIDO (${Math.abs(diffDays)}d)`
-                                : isSoon
-                                ? `VENCE EN ${diffDays}d`
-                                : `AL DÍA (${diffDays}d)`}
-                            </span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900">
+                                {doc.type}
+                              </span>
+                              <span
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${meta.badgeClass}`}
+                              >
+                                {meta.label}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              {doc.fileDataUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPreviewDocFile({
+                                      title: `${doc.type} — ${selectedAmb.code} (${selectedAmb.plate})`,
+                                      url: doc.fileDataUrl!,
+                                    })
+                                  }
+                                  className="px-2 py-1 rounded bg-blue-100 text-blue-800 font-bold text-[11px] flex items-center gap-1 hover:bg-blue-200"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  Ver Archivo
+                                </button>
+                              )}
+                              <label className="px-2 py-1 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-[11px] flex items-center gap-1 cursor-pointer">
+                                <Upload className="w-3 h-3 text-blue-600" />
+                                <span>{doc.fileName ? 'Cambiar' : 'Adjuntar'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  onChange={handleFileUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={handleQuickRenew}
+                                className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold"
+                              >
+                                +{renewMonths}m
+                              </button>
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 mt-2">
-                            <input
-                              type="date"
-                              value={doc.dateVal}
-                              onChange={(e) => handleDateChange(e.target.value)}
-                              className="w-full px-2 py-1 rounded border border-slate-300 bg-white text-xs font-semibold"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleQuickRenew}
-                              title={`Renovar ${doc.renewLabel}`}
-                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold shrink-0"
-                            >
-                              {doc.renewLabel}
-                            </button>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">
+                                Número / Referencia
+                              </label>
+                              <input
+                                type="text"
+                                value={doc.number}
+                                onChange={(e) =>
+                                  updateDocField({ number: e.target.value })
+                                }
+                                placeholder="Nº documento..."
+                                className="w-full px-2 py-1 rounded border border-slate-300 bg-white text-xs font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">
+                                Fecha Emisión
+                              </label>
+                              <input
+                                type="date"
+                                value={doc.issueDate}
+                                onChange={(e) =>
+                                  updateDocField({ issueDate: e.target.value })
+                                }
+                                className="w-full px-2 py-1 rounded border border-slate-300 bg-white text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">
+                                Fecha Vencimiento
+                              </label>
+                              <input
+                                type="date"
+                                value={doc.expiryDate}
+                                onChange={(e) =>
+                                  updateDocField({ expiryDate: e.target.value })
+                                }
+                                className="w-full px-2 py-1 rounded border border-slate-300 bg-white text-xs font-bold"
+                              />
+                            </div>
                           </div>
                         </div>
                       );
@@ -912,6 +967,45 @@ export const FleetView: React.FC<FleetViewProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal Vista Previa de Archivo de Documento */}
+      {previewDocFile && (
+        <div
+          onClick={() => setPreviewDocFile(null)}
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-2xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl"
+          >
+            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between text-xs font-bold">
+              <span>{previewDocFile.title}</span>
+              <button
+                type="button"
+                onClick={() => setPreviewDocFile(null)}
+                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="p-4 bg-slate-100 flex items-center justify-center">
+              {previewDocFile.url.startsWith('data:image/') ? (
+                <img
+                  src={previewDocFile.url}
+                  alt={previewDocFile.title}
+                  className="max-h-[70vh] object-contain rounded-lg border border-slate-300"
+                />
+              ) : (
+                <iframe
+                  src={previewDocFile.url}
+                  title={previewDocFile.title}
+                  className="w-full h-[70vh] rounded-lg border border-slate-300 bg-white"
+                />
+              )}
+            </div>
+          </div>
         </div>
       )}
 

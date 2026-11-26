@@ -7,6 +7,7 @@ import {
   SparePart,
   StockMovement,
   StockMovementType,
+  VehicleDocument,
   WorkOrder,
   WorkOrderStatus,
 } from './types';
@@ -26,6 +27,18 @@ import { WorkOrdersView } from './components/WorkOrdersView';
 import { PartsInventoryView } from './components/PartsInventoryView';
 import { exportFleetAndStockToCSV } from './utils/shareAndPrint';
 import {
+  STORAGE_KEY,
+  safeLoadFromStorage,
+  safeSaveToStorage,
+  getStorageUsageStats,
+  saveAutoBackupSnapshot,
+  loadAutoBackupSnapshot,
+  getCloudSyncConfig,
+  saveCloudSyncConfig,
+  formatBytes,
+} from './utils/storage';
+import { ensureAmbulanceDocuments } from './utils/expiryAlerts';
+import {
   LayoutDashboard,
   Truck,
   CalendarClock,
@@ -38,6 +51,12 @@ import {
   Upload,
   FileSpreadsheet,
   X,
+  Wifi,
+  WifiOff,
+  HardDrive,
+  AlertTriangle,
+  History,
+  Cloud,
 } from 'lucide-react';
 
 type ActiveTab =
@@ -48,25 +67,16 @@ type ActiveTab =
   | 'workorders'
   | 'parts';
 
-const STORAGE_KEY = 'ambufleet_mechanics_v1';
-
-const safeLoadFromStorage = <T,>(key: string, fallback: T): T => {
-  try {
-    const saved = localStorage.getItem(key);
-    return saved ? (JSON.parse(saved) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-const safeSaveToStorage = (key: string, value: unknown) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    console.warn(
-      `[AmbuFleet] Cuota de almacenamiento local alcanzada al guardar ${key}. Descarga una copia de seguridad en JSON.`
-    );
-  }
+const hydrateAmbulancesWithFullFleet = (saved: Ambulance[]): Ambulance[] => {
+  // Si el usuario tenía las 5 ambulancias del demo inicial, completamos hasta las 21 unidades reales conservando sus cambios
+  const byId = new Map<string, Ambulance>();
+  saved.forEach((a) => byId.set(a.id, { ...a, documents: ensureAmbulanceDocuments(a) }));
+  INITIAL_AMBULANCES.forEach((initAmb) => {
+    if (!byId.has(initAmb.id) && saved.length <= 5) {
+      byId.set(initAmb.id, { ...initAmb, documents: ensureAmbulanceDocuments(initAmb) });
+    }
+  });
+  return Array.from(byId.values());
 };
 
 const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
@@ -81,9 +91,17 @@ const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [showBackupModal, setShowBackupModal] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [storageStats, setStorageStats] = useState(() => getStorageUsageStats());
+  const [quotaAlert, setQuotaAlert] = useState<boolean>(false);
+  const [cloudConfig, setCloudConfig] = useState(() => getCloudSyncConfig());
 
   const [ambulances, setAmbulances] = useState<Ambulance[]>(() =>
-    safeLoadFromStorage(`${STORAGE_KEY}_ambulances`, INITIAL_AMBULANCES)
+    hydrateAmbulancesWithFullFleet(
+      safeLoadFromStorage(`${STORAGE_KEY}_ambulances`, INITIAL_AMBULANCES)
+    )
   );
 
   const [preventiveSchedules, setPreventiveSchedules] = useState<
@@ -111,30 +129,64 @@ export function App() {
     safeLoadFromStorage(`${STORAGE_KEY}_movements`, INITIAL_STOCK_MOVEMENTS)
   );
 
-  // Persistencia automática y segura en LocalStorage
+  // Detector de estado Online / Offline (PWA)
   useEffect(() => {
-    safeSaveToStorage(`${STORAGE_KEY}_ambulances`, ambulances);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Persistencia automática, control de cuota y snapshot de backup automático en LocalStorage
+  useEffect(() => {
+    safeSaveToStorage(`${STORAGE_KEY}_ambulances`, ambulances, () => setQuotaAlert(true));
   }, [ambulances]);
 
   useEffect(() => {
-    safeSaveToStorage(`${STORAGE_KEY}_preventive`, preventiveSchedules);
+    safeSaveToStorage(`${STORAGE_KEY}_preventive`, preventiveSchedules, () => setQuotaAlert(true));
   }, [preventiveSchedules]);
 
   useEffect(() => {
-    safeSaveToStorage(`${STORAGE_KEY}_checklists`, checklists);
+    safeSaveToStorage(`${STORAGE_KEY}_checklists`, checklists, () => setQuotaAlert(true));
   }, [checklists]);
 
   useEffect(() => {
-    safeSaveToStorage(`${STORAGE_KEY}_workorders`, workOrders);
+    safeSaveToStorage(`${STORAGE_KEY}_workorders`, workOrders, () => setQuotaAlert(true));
   }, [workOrders]);
 
   useEffect(() => {
-    safeSaveToStorage(`${STORAGE_KEY}_parts`, spareParts);
+    safeSaveToStorage(`${STORAGE_KEY}_parts`, spareParts, () => setQuotaAlert(true));
   }, [spareParts]);
 
   useEffect(() => {
-    safeSaveToStorage(`${STORAGE_KEY}_movements`, stockMovements);
+    safeSaveToStorage(`${STORAGE_KEY}_movements`, stockMovements, () => setQuotaAlert(true));
   }, [stockMovements]);
+
+  useEffect(() => {
+    saveAutoBackupSnapshot(
+      {
+        ambulances,
+        preventiveSchedules,
+        checklists,
+        workOrders,
+        spareParts,
+        stockMovements,
+      },
+      'Copia automática tras cambio de datos'
+    );
+    setStorageStats(getStorageUsageStats());
+  }, [
+    ambulances,
+    preventiveSchedules,
+    checklists,
+    workOrders,
+    spareParts,
+    stockMovements,
+  ]);
 
   const recordStockMovement = (
     part: SparePart,
@@ -196,11 +248,52 @@ export function App() {
     insuranceExpiry: string
   ) => {
     setAmbulances((prev) =>
-      prev.map((a) =>
-        a.id === id
-          ? { ...a, itvExpiry, sanitaryCertExpiry, insuranceExpiry }
-          : a
-      )
+      prev.map((a) => {
+        if (a.id !== id) return a;
+        const docs = ensureAmbulanceDocuments(a).map((doc) => {
+          if (doc.type === 'ITV') return { ...doc, expiryDate: itvExpiry };
+          if (doc.type === 'Certificado Técnico-Sanitario')
+            return { ...doc, expiryDate: sanitaryCertExpiry };
+          if (doc.type === 'Seguro') return { ...doc, expiryDate: insuranceExpiry };
+          return doc;
+        });
+        return {
+          ...a,
+          itvExpiry,
+          sanitaryCertExpiry,
+          insuranceExpiry,
+          documents: docs,
+        };
+      })
+    );
+  };
+
+  const handleUpdateVehicleDocument = (
+    ambulanceId: string,
+    updatedDoc: VehicleDocument
+  ) => {
+    setAmbulances((prev) =>
+      prev.map((a) => {
+        if (a.id !== ambulanceId) return a;
+        const currentDocs = ensureAmbulanceDocuments(a);
+        const nextDocs = currentDocs.map((d) =>
+          d.type === updatedDoc.type ? updatedDoc : d
+        );
+        return {
+          ...a,
+          itvExpiry:
+            updatedDoc.type === 'ITV' ? updatedDoc.expiryDate : a.itvExpiry,
+          sanitaryCertExpiry:
+            updatedDoc.type === 'Certificado Técnico-Sanitario'
+              ? updatedDoc.expiryDate
+              : a.sanitaryCertExpiry,
+          insuranceExpiry:
+            updatedDoc.type === 'Seguro'
+              ? updatedDoc.expiryDate
+              : a.insuranceExpiry,
+          documents: nextDocs,
+        };
+      })
     );
   };
 
@@ -772,6 +865,30 @@ export function App() {
     reader.readAsText(file);
   };
 
+  const handleRestoreAutoBackup = () => {
+    const snap = loadAutoBackupSnapshot<{
+      ambulances?: Ambulance[];
+      preventiveSchedules?: PreventiveSchedule[];
+      checklists?: FleetChecklist[];
+      workOrders?: WorkOrder[];
+      spareParts?: SparePart[];
+      stockMovements?: StockMovement[];
+    }>();
+    if (!snap || !snap.payload) {
+      alert('No se encontró ninguna copia automática en este dispositivo.');
+      return;
+    }
+    const { payload } = snap;
+    if (payload.ambulances) setAmbulances(payload.ambulances);
+    if (payload.preventiveSchedules)
+      setPreventiveSchedules(payload.preventiveSchedules);
+    if (payload.checklists) setChecklists(payload.checklists);
+    if (payload.workOrders) setWorkOrders(payload.workOrders);
+    if (payload.spareParts) setSpareParts(payload.spareParts);
+    if (payload.stockMovements) setStockMovements(payload.stockMovements);
+    setShowBackupModal(false);
+  };
+
   const handleResetDemoData = () => {
     localStorage.removeItem(`${STORAGE_KEY}_ambulances`);
     localStorage.removeItem(`${STORAGE_KEY}_preventive`);
@@ -779,7 +896,12 @@ export function App() {
     localStorage.removeItem(`${STORAGE_KEY}_workorders`);
     localStorage.removeItem(`${STORAGE_KEY}_parts`);
     localStorage.removeItem(`${STORAGE_KEY}_movements`);
-    setAmbulances(INITIAL_AMBULANCES);
+    setAmbulances(
+      INITIAL_AMBULANCES.map((a) => ({
+        ...a,
+        documents: ensureAmbulanceDocuments(a),
+      }))
+    );
     setPreventiveSchedules(INITIAL_PREVENTIVE_SCHEDULES);
     setChecklists(INITIAL_CHECKLISTS);
     setWorkOrders(INITIAL_WORK_ORDERS);
@@ -864,21 +986,53 @@ export function App() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <span
+              title={
+                isOnline
+                  ? 'PWA Conectada (Service Worker activo para uso offline)'
+                  : 'Modo sin conexión activo: trabajando sobre caché local'
+              }
+              className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border ${
+                isOnline
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                  : 'bg-amber-950/80 text-amber-300 border-amber-700'
+              }`}
+            >
+              {isOnline ? (
+                <>
+                  <Wifi className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline">Online PWA</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3.5 h-3.5" />
+                  <span>Offline</span>
+                </>
+              )}
+            </span>
+
             <button
               type="button"
               onClick={() => setShowBackupModal(true)}
-              className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition"
+              className={`px-2.5 py-1.5 rounded-lg text-white text-xs font-semibold flex items-center gap-1.5 transition ${
+                storageStats.isWarning || quotaAlert
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sincronizar / Datos</span>
+              <span className="hidden sm:inline">Backup / Sync</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/20 font-mono">
+                {storageStats.usagePercent}%
+              </span>
             </button>
             <button
               onClick={handleResetDemoData}
-              title="Restaurar datos de ejemplo iniciales"
+              title="Restaurar datos de ejemplo iniciales (21 ambulancias)"
               className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Demo</span>
+              <span className="hidden sm:inline">Demo (21)</span>
             </button>
           </div>
         </div>
@@ -954,7 +1108,38 @@ export function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex-1">
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 space-y-4">
+        {/* Aviso automático de límite de almacenamiento local */}
+        {(storageStats.isWarning || quotaAlert) && (
+          <div
+            className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+              storageStats.isCritical || quotaAlert
+                ? 'bg-rose-50 border-rose-300 text-rose-900'
+                : 'bg-amber-50 border-amber-300 text-amber-900'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-rose-600" />
+              <div>
+                <p className="font-bold">
+                  Aviso de límite de almacenamiento local ({storageStats.usagePercent}% ocupado —{' '}
+                  {formatBytes(storageStats.usedBytes)} de {formatBytes(storageStats.maxBytes)})
+                </p>
+                <p className="text-[11px] opacity-90">
+                  Te recomendamos descargar una copia de seguridad JSON o limpiar fotografías antiguas para evitar alcanzar el tope del navegador.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownloadJsonBackup}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-bold hover:bg-slate-800 shrink-0"
+            >
+              Descargar Backup JSON Ahora
+            </button>
+          </div>
+        )}
+
         {activeTab === 'dashboard' && (
           <DashboardView
             ambulances={ambulances}
@@ -977,6 +1162,7 @@ export function App() {
             onUpdateStatus={handleUpdateAmbulanceStatus}
             onUpdateMileage={handleUpdateMileage}
             onUpdateLegalDates={handleUpdateLegalDates}
+            onUpdateVehicleDocument={handleUpdateVehicleDocument}
             onRestockVehiclePart={handleRestockVehiclePart}
             onUpdateVehiclePartQty={handleUpdateVehiclePartQty}
             onAddPartToVehicleOnboard={handleAddPartToVehicleOnboard}
@@ -1034,13 +1220,14 @@ export function App() {
         )}
       </main>
 
-      {/* Modal Sincronizar Móvil/PC y Exportar Copia de Seguridad (1.3) */}
+      {/* Modal Backup Automático, Cuota de Almacenamiento y Sincronización (Fase 0) */}
       {showBackupModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">
-                Sincronizar Móvil / PC y Exportar Datos
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-blue-600" />
+                Backup Automático, Almacenamiento y Sincronización
               </h3>
               <button
                 type="button"
@@ -1051,19 +1238,69 @@ export function App() {
               </button>
             </div>
 
-            <p className="text-xs text-slate-600">
-              Descarga una copia completa desde tu móvil/tablet para cargarla en
-              el ordenador del taller, o exporta las tablas a Excel (CSV).
-            </p>
+            {/* Medidor de almacenamiento LocalStorage */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+              <div className="flex items-center justify-between font-bold text-slate-800">
+                <span>Uso de Memoria Local (Offline Cache)</span>
+                <span>
+                  {formatBytes(storageStats.usedBytes)} / {formatBytes(storageStats.maxBytes)} ({storageStats.usagePercent}%)
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all ${
+                    storageStats.isCritical
+                      ? 'bg-rose-600'
+                      : storageStats.isWarning
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-600'
+                  }`}
+                  style={{ width: `${Math.max(3, storageStats.usagePercent)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Las fotos adjuntas se comprimen automáticamente (JPEG 640px) para proteger la cuota de almacenamiento offline.
+              </p>
+            </div>
 
+            {/* Snapshot de Backup Automático Local */}
+            {(() => {
+              const autoSnap = loadAutoBackupSnapshot();
+              return (
+                <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="font-bold text-blue-950 flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-blue-600" />
+                      Punto de Restauración Automático Local
+                    </span>
+                    <span className="text-[11px] text-blue-700 block mt-0.5">
+                      {autoSnap
+                        ? `Última copia automática: ${new Date(autoSnap.timestamp).toLocaleString('es-ES')}`
+                        : 'Se genera automáticamente con cada cambio.'}
+                    </span>
+                  </div>
+                  {autoSnap && (
+                    <button
+                      type="button"
+                      onClick={handleRestoreAutoBackup}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                    >
+                      Restaurar Punto
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Exportar / Importar Archivo JSON y CSV */}
             <div className="space-y-2.5 text-xs">
               <button
                 type="button"
                 onClick={handleDownloadJsonBackup}
-                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold flex items-center justify-center gap-2"
               >
                 <Download className="w-4 h-4" />
-                Descargar Copia de Seguridad (.JSON)
+                Descargar Copia de Seguridad Completa (.JSON)
               </button>
 
               <label className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold flex items-center justify-center gap-2 cursor-pointer">
@@ -1083,8 +1320,47 @@ export function App() {
                 className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-2"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                Exportar Flota y Stock a Excel (.CSV)
+                Exportar Flota (21) y Stock a Excel (.CSV)
               </button>
+            </div>
+
+            {/* Preparación Sincronización Nube 2 Usuarios (Supabase) */}
+            <div className="pt-3 border-t border-slate-200 space-y-2 text-xs">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                <Cloud className="w-4 h-4 text-blue-600" />
+                Sincronización Multiusuario (Preparado para Supabase: 2 Usuarios)
+              </span>
+              <p className="text-[11px] text-slate-500">
+                Configura las credenciales del proyecto Supabase cuando despliegues el backend para sincronizar automáticamente Encargado y Operador.
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                <input
+                  type="url"
+                  placeholder="https://tu-proyecto.supabase.co"
+                  value={cloudConfig.supabaseUrl}
+                  onChange={(e) => {
+                    const next = { ...cloudConfig, supabaseUrl: e.target.value };
+                    setCloudConfig(next);
+                    saveCloudSyncConfig(next);
+                  }}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 font-mono text-[11px]"
+                />
+                <input
+                  type="password"
+                  placeholder="SUPABASE_ANON_KEY (opcional)"
+                  value={cloudConfig.supabaseAnonKey}
+                  onChange={(e) => {
+                    const next = {
+                      ...cloudConfig,
+                      supabaseAnonKey: e.target.value,
+                      enabled: Boolean(cloudConfig.supabaseUrl && e.target.value),
+                    };
+                    setCloudConfig(next);
+                    saveCloudSyncConfig(next);
+                  }}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 font-mono text-[11px]"
+                />
+              </div>
             </div>
           </div>
         </div>

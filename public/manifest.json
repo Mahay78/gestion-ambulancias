@@ -1,7 +1,7 @@
 {
-  "name": "AmbuFleet Mecánica - Gestión de Ambulancias",
+  "name": "AmbuFleet - Gestión de Flota de Ambulancias",
   "short_name": "AmbuFleet",
-  "description": "Gestión mecánica de flota de ambulancias, checklists a pie de vehículo, órdenes de taller y stock de repuestos.",
+  "description": "Gestión de flota de 21 ambulancias, documentación y vencimientos, talleres externos, incidencias y stock propio de repuestos.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0f172a",

@@ -7,6 +7,10 @@ import {
   SparePart,
 } from '../types';
 import {
+  collectAllDocumentAlerts,
+  getExpiryBadgeMeta,
+} from '../utils/expiryAlerts';
+import {
   Truck,
   Wrench,
   AlertTriangle,
@@ -16,6 +20,7 @@ import {
   ArrowRight,
   ShieldAlert,
   Gauge,
+  FileWarning,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -46,6 +51,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const openWorkOrders = workOrders.filter((w) => w.status !== 'Finalizada');
   const pendingChecklists = checklists.filter((c) => c.workshopStatus === 'Pendiente de Revisión Taller');
   const lowStockParts = spareParts.filter((p) => p.stockQuantity <= p.minStockAlert);
+
+  // Calcular alertas de vencimientos documentales (ITV, Seguro, Cert. Técnico-Sanitario, Tacógrafo, Ficha Técnica) a 30/15/7 días y vencidos
+  const documentAlerts = collectAllDocumentAlerts(ambulances);
+  const expiredDocsCount = documentAlerts.filter((a) => a.level === 'expired').length;
+  const days7DocsCount = documentAlerts.filter((a) => a.level === 'days7').length;
+  const days15DocsCount = documentAlerts.filter((a) => a.level === 'days15').length;
+  const days30DocsCount = documentAlerts.filter((a) => a.level === 'days30').length;
 
   // Calcular alertas de mantenimiento preventivo (por km o fecha)
   const today = new Date().toISOString().split('T')[0];
@@ -199,6 +211,88 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="mt-3 text-xs text-slate-500">
             {vehiclesWithMissingOnboard.length} ambulancias con piezas a bordo incompletas
           </p>
+        </div>
+      </div>
+
+      {/* Panel de Alertas de Documentación y Vencimientos (30 / 15 / 7 días y Vencidos) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">
+          <div className="flex items-center gap-2.5">
+            <FileWarning className="w-5 h-5 text-rose-600" />
+            <div>
+              <h2 className="font-bold text-slate-800">
+                Alertas de Vencimientos Documentales (ITV, Seguro, Técnico-Sanitario, Tacógrafo y Ficha Técnica)
+              </h2>
+              <p className="text-xs text-slate-500">
+                Avisos automáticos escalonados a 30 días, 15 días, 7 días y documentos vencidos
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+            <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white">
+              Vencidos: {expiredDocsCount}
+            </span>
+            <span className="px-2.5 py-1 rounded-full bg-red-500 text-white">
+              ≤ 7 días: {days7DocsCount}
+            </span>
+            <span className="px-2.5 py-1 rounded-full bg-orange-500 text-white">
+              ≤ 15 días: {days15DocsCount}
+            </span>
+            <span className="px-2.5 py-1 rounded-full bg-amber-500 text-white">
+              ≤ 30 días: {days30DocsCount}
+            </span>
+            <button
+              onClick={() => onNavigate('fleet')}
+              className="ml-2 text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+            >
+              Gestionar Documentos <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5">
+          {documentAlerts.length === 0 ? (
+            <div className="text-center py-6 text-slate-500 text-sm">
+              Toda la documentación de las {ambulances.length} ambulancias tiene más de 30 días de vigencia.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {documentAlerts.map((alert) => {
+                const meta = getExpiryBadgeMeta(alert.daysRemaining);
+                return (
+                  <div
+                    key={`${alert.ambulanceId}-${alert.document.type}`}
+                    onClick={() => onNavigate('fleet')}
+                    className={`p-3.5 rounded-xl border cursor-pointer transition hover:shadow-xs flex items-start justify-between gap-2 ${meta.cardClass}`}
+                  >
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-bold">
+                          {alert.ambulanceCode}
+                        </span>
+                        <span className="font-mono font-semibold text-slate-700">
+                          {alert.ambulancePlate}
+                        </span>
+                      </div>
+                      <p className="font-bold text-slate-900 text-sm">
+                        {alert.document.type}
+                      </p>
+                      <p className="text-slate-600">
+                        Nº: <span className="font-mono">{alert.document.number}</span> • Vence:{' '}
+                        <strong>{alert.document.expiryDate}</strong>
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 border ${meta.badgeClass}`}
+                    >
+                      {meta.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

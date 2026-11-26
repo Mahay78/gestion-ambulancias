@@ -1,6 +1,24 @@
 export type AmbulanceStatus = 'Activa' | 'En Taller' | 'Fuera de Servicio' | 'Revisión Pendiente';
 export type AmbulanceType = 'SVA (UVI Móvil)' | 'SVB (Soporte Vital Básico)' | 'TNA (Transporte No Asistido)';
 
+export type DocumentType =
+  | 'ITV'
+  | 'Seguro'
+  | 'Certificado Técnico-Sanitario'
+  | 'Tacógrafo'
+  | 'Ficha Técnica';
+
+export interface VehicleDocument {
+  id: string;
+  type: DocumentType;
+  number: string;
+  issueDate: string; // YYYY-MM-DD
+  expiryDate: string; // YYYY-MM-DD
+  fileName?: string;
+  fileDataUrl?: string;
+  notes?: string;
+}
+
 export interface VehicleOnboardPart {
   partId: string;
   partName: string;
@@ -10,7 +28,7 @@ export interface VehicleOnboardPart {
 
 export interface Ambulance {
   id: string;
-  code: string; // ej. AMB-01
+  code: string; // ej. AMB-01 .. AMB-21
   plate: string; // Matrícula
   brand: string;
   model: string;
@@ -24,6 +42,7 @@ export interface Ambulance {
   itvExpiry: string; // YYYY-MM-DD
   sanitaryCertExpiry: string; // YYYY-MM-DD
   insuranceExpiry: string; // YYYY-MM-DD
+  documents?: VehicleDocument[];
   lastServiceDate: string;
   lastServiceMileage: number;
   notes: string;
