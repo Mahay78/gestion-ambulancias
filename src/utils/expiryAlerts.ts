@@ -21,7 +21,6 @@ export const DOCUMENT_TYPES_ORDER: DocumentType[] = [
   'ITV',
   'Seguro',
   'Certificado Técnico-Sanitario',
-  'Tacógrafo',
   'Ficha Técnica',
 ];
 
@@ -94,10 +93,12 @@ export const getExpiryBadgeMeta = (daysRemaining: number) => {
 
 /**
  * Garantiza que cualquier ambulancia (incluso cargada desde un backup antiguo)
- * disponga de los 5 documentos reglamentarios: ITV, Seguro, Certificado Técnico-Sanitario, Tacógrafo y Ficha Técnica.
+ * disponga de los 4 documentos reglamentarios: ITV, Seguro, Certificado Técnico-Sanitario y Ficha Técnica.
  */
 export const ensureAmbulanceDocuments = (amb: Ambulance): VehicleDocument[] => {
-  const existing = amb.documents || [];
+  const existing = (amb.documents || []).filter(
+    (doc) => (doc.type as string) !== 'Tacógrafo'
+  );
   const byType = new Map<DocumentType, VehicleDocument>();
   existing.forEach((doc) => byType.set(doc.type, doc));
 
@@ -132,14 +133,6 @@ export const ensureAmbulanceDocuments = (amb: Ambulance): VehicleDocument[] => {
       issueDate: subtractMonths(amb.sanitaryCertExpiry || '2027-05-20', 12),
       expiryDate: amb.sanitaryCertExpiry || '2027-05-20',
       notes: 'Autorización autonómica transporte sanitario por carretera',
-    }),
-    Tacógrafo: () => ({
-      id: `${amb.id}-doc-tac`,
-      type: 'Tacógrafo',
-      number: `TAC-${amb.vin.slice(-6)}`,
-      issueDate: '2025-06-15',
-      expiryDate: '2027-06-15',
-      notes: 'Revisión bianual / control de limitador y registro',
     }),
     'Ficha Técnica': () => ({
       id: `${amb.id}-doc-fic`,

@@ -7,7 +7,6 @@ export type DocumentType =
   | 'ITV'
   | 'Seguro'
   | 'Certificado Técnico-Sanitario'
-  | 'Tacógrafo'
   | 'Ficha Técnica';
 
 export interface VehicleDocument {

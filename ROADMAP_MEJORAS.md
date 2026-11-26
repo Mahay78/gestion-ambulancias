@@ -7,7 +7,7 @@
 ---
 
 ## ✅ Fases Completadas (Base Operativa Actual)
-- [x] **Fase 0**: PWA real con Service Worker offline (`public/sw.js`), backup automático con punto de restauración local, aviso de cuota de `localStorage`, compresión automática de fotos, flota de 21 ambulancias (`AMB-01` a `AMB-21`) y alertas de los 5 documentos reglamentarios (`ITV`, `Seguro`, `Certificado Técnico-Sanitario`, `Tacógrafo`, `Ficha Técnica`) a **30 / 15 / 7 días y vencidos**.
+- [x] **Fase 0**: PWA real con Service Worker offline (`public/sw.js`), backup automático con punto de restauración local, aviso de cuota de `localStorage`, compresión automática de fotos, flota de 21 ambulancias (`AMB-01` a `AMB-21`) y alertas de los 4 documentos reglamentarios (`ITV`, `Seguro`, `Certificado Técnico-Sanitario`, `Ficha Técnica`) a **30 / 15 / 7 días y vencidos**.
 - [x] **Fase 1**: Eliminación total de campos monetarios y de mecánicos internos; directorio de **Talleres Externos**, **Órdenes de Reparación Externas** (`Reportada → Asignada → En taller → Reparada → Cerrada`) con cálculo de días parado, informe del taller, garantía y suministro de repuestos propios; sincronización automática de disponibilidad (`Disponible` / `En taller` / `Fuera de servicio`) y selector de roles (`Encargado` / `Operador`).
 - [x] **Fase 2**: **Stock de repuestos sin costes** con ubicación simple de almacén y contacto de proveedor; registro trazable de movimientos (`Entrada`, `Salida a reparación`, `Salida a vehículo`, `Ajuste`) con notas y usuario; **Dotación a bordo obligatoria** con estado interactivo `OK / FALTA`; e **Historial / Línea temporal unificada por vehículo**.
 
@@ -30,6 +30,6 @@
 - [ ] **3.3. Panel Visual de Neumáticos (4 Ruedas + Repuesto) y Doble Batería**: Control por eje de profundidad de dibujo (`mm`), presión (`bar`) y estado de batería de arranque vs. batería AGM auxiliar de célula sanitaria.
 
 ### 4. Alertas Proactivas de Vencimientos y Almacén
-- [ ] **4.1. Notificaciones Locales PWA de Vencimientos Críticos**: Aviso del navegador al iniciar el día cuando algún documento (`ITV`, `Seguro`, `Certificado Técnico-Sanitario`, `Tacógrafo`) entre en la franja de **≤ 15 días**, **≤ 7 días** o **Vencido**.
+- [ ] **4.1. Notificaciones Locales PWA de Vencimientos Críticos**: Aviso del navegador al iniciar el día cuando algún documento (`ITV`, `Seguro`, `Certificado Técnico-Sanitario`, `Ficha Técnica`) entre en la franja de **≤ 15 días**, **≤ 7 días** o **Vencido**.
 - [ ] **4.2. Exportación de Calendario `.ICS` (Google Calendar / Outlook / Apple)**: Descarga en 1 clic de todos los vencimientos documentales y preventivos de las 21 ambulancias para integrarlos en el calendario del móvil.
 - [ ] **4.3. Escáner de Código de Barras / QR en Almacén de Repuestos**: Lectura con la cámara del móvil o tablet para registrar entradas y salidas de repuestos hacia órdenes externas en segundos.

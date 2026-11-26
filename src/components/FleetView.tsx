@@ -498,10 +498,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
                               ? `DOCUMENTO VENCIDO (${Math.abs(minD)}d)`
                               : minD <= 30
                               ? `ALERTA VENCIMIENTO: ${meta.label}`
-                              : '5 DOCUMENTOS EN REGLA'}
+                              : '4 DOCUMENTOS EN REGLA'}
                           </span>
                           <p className="text-[11px] text-slate-500">
-                            ITV, Seguro, Técnico-Sanitario, Tacógrafo y Ficha Técnica
+                            ITV, Seguro, Técnico-Sanitario y Ficha Técnica
                           </p>
                         </div>
                       );
@@ -509,12 +509,12 @@ export const FleetView: React.FC<FleetViewProps> = ({
                   </div>
                 </div>
 
-                {/* Documentación y Vencimientos (5 Documentos Reglamentarios con Alertas 30/15/7 días y Vencidos) */}
+                {/* Documentación y Vencimientos (4 Documentos Reglamentarios con Alertas 30/15/7 días y Vencidos) */}
                 <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                       <FileText className="w-4 h-4 text-blue-600" />
-                      Documentación y Vencimientos (ITV, Seguro, Técnico-Sanitario, Tacógrafo, Ficha Técnica)
+                      Documentación y Vencimientos (ITV, Seguro, Técnico-Sanitario y Ficha Técnica)
                     </h3>
                     <span className="text-[11px] text-slate-500">
                       Alertas: 30d (Ámbar) • 15d (Naranja) • 7d (Rojo) • Vencido
@@ -525,7 +525,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
                     {ensureAmbulanceDocuments(selectedAmb).map((doc) => {
                       const diffDays = calculateDaysRemaining(doc.expiryDate);
                       const meta = getExpiryBadgeMeta(diffDays);
-                      const renewMonths = doc.type === 'ITV' ? 6 : doc.type === 'Tacógrafo' ? 24 : 12;
+                      const renewMonths = doc.type === 'ITV' ? 6 : 12;
 
                       const updateDocField = (patch: Partial<VehicleDocument>) => {
                         const updated: VehicleDocument = { ...doc, ...patch };

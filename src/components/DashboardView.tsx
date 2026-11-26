@@ -63,7 +63,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
   const lowStockParts = spareParts.filter((p) => p.stockQuantity <= p.minStockAlert);
 
-  // Calcular alertas de vencimientos documentales (ITV, Seguro, Cert. Técnico-Sanitario, Tacógrafo, Ficha Técnica) a 30/15/7 días y vencidos
+  // Calcular alertas de vencimientos documentales (ITV, Seguro, Cert. Técnico-Sanitario, Ficha Técnica) a 30/15/7 días y vencidos
   const documentAlerts = collectAllDocumentAlerts(ambulances);
   const expiredDocsCount = documentAlerts.filter((a) => a.level === 'expired').length;
   const days7DocsCount = documentAlerts.filter((a) => a.level === 'days7').length;
@@ -230,7 +230,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <FileWarning className="w-5 h-5 text-rose-600" />
             <div>
               <h2 className="font-bold text-slate-800">
-                Alertas de Vencimientos Documentales (ITV, Seguro, Técnico-Sanitario, Tacógrafo y Ficha Técnica)
+                Alertas de Vencimientos Documentales (ITV, Seguro, Técnico-Sanitario y Ficha Técnica)
               </h2>
               <p className="text-xs text-slate-500">
                 Avisos automáticos escalonados a 30 días, 15 días, 7 días y documentos vencidos
