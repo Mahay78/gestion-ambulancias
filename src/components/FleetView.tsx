@@ -3,7 +3,11 @@ import {
   Ambulance,
   AmbulanceStatus,
   AmbulanceType,
+  ExternalWorkshop,
+  FleetChecklist,
+  PreventiveSchedule,
   SparePart,
+  StockMovement,
   VehicleDocument,
   WorkOrder,
 } from '../types';
@@ -28,6 +32,10 @@ import {
   FileText,
   Upload,
   Eye,
+  History,
+  ClipboardCheck,
+  CalendarClock,
+  Package,
 } from 'lucide-react';
 import { PlateScannerModal } from './PlateScannerModal';
 
@@ -35,6 +43,10 @@ interface FleetViewProps {
   ambulances: Ambulance[];
   spareParts: SparePart[];
   workOrders: WorkOrder[];
+  checklists?: FleetChecklist[];
+  preventiveSchedules?: PreventiveSchedule[];
+  stockMovements?: StockMovement[];
+  workshops?: ExternalWorkshop[];
   onAddAmbulance: (amb: Omit<Ambulance, 'id'>) => void;
   onDeleteAmbulance: (id: string) => void;
   onUpdateStatus: (id: string, status: AmbulanceStatus) => void;
@@ -66,6 +78,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
   ambulances,
   spareParts,
   workOrders,
+  checklists = [],
+  preventiveSchedules = [],
+  stockMovements = [],
+  workshops = [],
   onAddAmbulance,
   onDeleteAmbulance,
   onUpdateStatus,
@@ -79,6 +95,9 @@ export const FleetView: React.FC<FleetViewProps> = ({
 }) => {
   const [selectedAmbId, setSelectedAmbId] = useState<string>(ambulances[0]?.id || '');
   const [filterStatus, setFilterStatus] = useState<string>('Todas');
+  const [historyFilter, setHistoryFilter] = useState<
+    'all' | 'orders' | 'incidents' | 'preventive' | 'documents' | 'stock'
+  >('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPlateScanner, setShowPlateScanner] = useState(false);
   const [confirmDeleteAmb, setConfirmDeleteAmb] = useState<Ambulance | null>(null);
@@ -658,17 +677,17 @@ export const FleetView: React.FC<FleetViewProps> = ({
                   </div>
                 </div>
 
-                {/* Dotación y Stock de Piezas a Bordo del Vehículo (Añadir / Eliminar Unidades) */}
+                {/* Dotación a Bordo Obligatoria del Vehículo (Estado OK / Falta) */}
                 <div className="mt-6 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <PackageCheck className="w-5 h-5 text-blue-600" />
                       <h3 className="text-sm font-bold text-slate-900">
-                        Stock de Piezas del Vehículo ({selectedAmb.code})
+                        Dotación a Bordo Obligatoria ({selectedAmb.code}) — Estado OK / Falta
                       </h3>
                     </div>
                     <span className="text-xs text-slate-500">
-                      Añade, resta o elimina unidades del stock a bordo
+                      Equipamiento obligatorio por vehículo y reposición desde almacén
                     </span>
                   </div>
 
@@ -677,10 +696,11 @@ export const FleetView: React.FC<FleetViewProps> = ({
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase">
-                            <th className="py-2.5 px-3">Pieza / Repuesto en Vehículo</th>
-                            <th className="py-2.5 px-3 text-center">Uds. Requeridas</th>
+                            <th className="py-2.5 px-3">Equipamiento / Pieza a Bordo</th>
+                            <th className="py-2.5 px-3 text-center">Estado</th>
+                            <th className="py-2.5 px-3 text-center">Exigido</th>
                             <th className="py-2.5 px-3 text-center">
-                              Uds. Actuales a Bordo
+                              Actual a Bordo
                             </th>
                             <th className="py-2.5 px-3 text-right">Acciones</th>
                           </tr>
@@ -689,10 +709,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
                           {selectedAmb.onboardParts.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={4}
+                                colSpan={5}
                                 className="py-4 text-center text-slate-400"
                               >
-                                No hay piezas asignadas a este vehículo. Añade una abajo.
+                                No hay equipamiento asignado a este vehículo. Añade uno abajo.
                               </td>
                             </tr>
                           ) : (
@@ -707,10 +727,35 @@ export const FleetView: React.FC<FleetViewProps> = ({
                                     {item.partName}
                                     {warehousePart && (
                                       <span className="block text-[11px] text-slate-400">
-                                        En almacén taller: {warehousePart.stockQuantity}{' '}
+                                        En almacén propio: {warehousePart.stockQuantity}{' '}
                                         uds.
                                       </span>
                                     )}
+                                  </td>
+
+                                  {/* Estado OK / Falta con botón directo para alternar */}
+                                  <td className="py-2.5 px-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onUpdateVehiclePartQty(
+                                          selectedAmb.id,
+                                          item.partId,
+                                          'currentQty',
+                                          isComplete
+                                            ? -item.currentQty
+                                            : item.requiredQty - item.currentQty
+                                        )
+                                      }
+                                      title="Pulsar para alternar estado OK / Falta"
+                                      className={`px-2.5 py-1 rounded-full font-extrabold text-[11px] transition ${
+                                        isComplete
+                                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                          : 'bg-rose-600 text-white hover:bg-rose-700'
+                                      }`}
+                                    >
+                                      {isComplete ? 'OK' : 'FALTA'}
+                                    </button>
                                   </td>
 
                                   {/* Control +/- Unidades Requeridas */}
@@ -816,7 +861,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
 
                                       <button
                                         type="button"
-                                        title="Quitar pieza de la dotación de este vehículo"
+                                        title="Quitar equipamiento de la dotación de este vehículo"
                                         onClick={() =>
                                           onRemovePartFromVehicleOnboard(
                                             selectedAmb.id,
@@ -928,40 +973,220 @@ export const FleetView: React.FC<FleetViewProps> = ({
                   </div>
                 </div>
 
-                {/* Historial resumido de OTs del vehículo */}
-                <div className="mt-6 pt-5 border-t border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-1.5">
-                    <Wrench className="w-4 h-4 text-slate-600" />
-                    Historial Mecánico de {selectedAmb.code} ({ambWorkOrders.length} OTs)
-                  </h3>
-                  {ambWorkOrders.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      Sin órdenes de trabajo registradas para esta unidad.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {ambWorkOrders.map((wo) => (
-                        <div
-                          key={wo.id}
-                          className="p-3 rounded-lg border border-slate-200 text-xs flex items-center justify-between"
+                {/* Historial Integral / Línea Temporal del Vehículo (Incidencias, Órdenes Externas, Preventivos, Documentos y Movimientos de Stock) */}
+                <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                      <History className="w-4 h-4 text-blue-600" />
+                      Historial / Línea Temporal de {selectedAmb.code} ({selectedAmb.plate})
+                    </h3>
+
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                      {(
+                        [
+                          { id: 'all', label: 'Todo' },
+                          { id: 'orders', label: 'Órdenes Externas' },
+                          { id: 'incidents', label: 'Incidencias' },
+                          { id: 'preventive', label: 'Preventivos' },
+                          { id: 'documents', label: 'Documentos' },
+                          { id: 'stock', label: 'Movimientos Stock' },
+                        ] as const
+                      ).map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setHistoryFilter(f.id)}
+                          className={`px-2.5 py-1 rounded-lg font-semibold transition ${
+                            historyFilter === f.id
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
                         >
-                          <div>
-                            <span className="font-bold text-slate-900">{wo.code}</span> •{' '}
-                            <span className="font-semibold text-slate-800">
-                              {wo.title}
-                            </span>
-                            <p className="text-slate-500 mt-0.5">
-                              Entrada: {wo.entryDate || wo.createdAt} •{' '}
-                              {wo.mileageAtEntry.toLocaleString()} km
-                            </p>
-                          </div>
-                          <span className="px-2.5 py-1 rounded-full font-semibold bg-slate-100 text-slate-800">
-                            {wo.status}
-                          </span>
-                        </div>
+                          {f.label}
+                        </button>
                       ))}
                     </div>
-                  )}
+                  </div>
+
+                  {(() => {
+                    type TimelineEvent = {
+                      id: string;
+                      date: string;
+                      category:
+                        | 'orders'
+                        | 'incidents'
+                        | 'preventive'
+                        | 'documents'
+                        | 'stock';
+                      badge: string;
+                      badgeClass: string;
+                      title: string;
+                      subtitle: string;
+                      icon: React.ReactNode;
+                    };
+
+                    const events: TimelineEvent[] = [];
+
+                    // 1. Órdenes de Reparación Externas
+                    ambWorkOrders.forEach((wo) => {
+                      const ws = workshops.find((w) => w.id === wo.workshopId);
+                      events.push({
+                        id: `tl-wo-${wo.id}`,
+                        date: wo.entryDate || wo.createdAt,
+                        category: 'orders',
+                        badge: `Orden ${wo.status}`,
+                        badgeClass: 'bg-amber-100 text-amber-800',
+                        title: `${wo.code} — ${wo.title}`,
+                        subtitle: `Taller Externo: ${
+                          ws?.name || 'Taller Asignado'
+                        } • ${wo.mileageAtEntry.toLocaleString()} km • Repuestos suministrados: ${wo.partsUsed.reduce(
+                          (s, p) => s + p.quantity,
+                          0
+                        )} uds.${wo.warranty ? ` • Garantía: ${wo.warranty}` : ''}`,
+                        icon: <Wrench className="w-3.5 h-3.5 text-amber-600" />,
+                      });
+                    });
+
+                    // 2. Incidencias / Checklists
+                    checklists
+                      .filter((c) => c.ambulanceId === selectedAmb.id)
+                      .forEach((chk) => {
+                        const faults = chk.items.filter(
+                          (i) => i.status !== 'OK'
+                        ).length;
+                        events.push({
+                          id: `tl-chk-${chk.id}`,
+                          date: chk.date,
+                          category: 'incidents',
+                          badge: `Incidencia (${chk.overallUrgency})`,
+                          badgeClass: 'bg-rose-100 text-rose-800',
+                          title: chk.generalObservations,
+                          subtitle: `Reporta: ${chk.inspectorName} • ${chk.mileageAtInspection.toLocaleString()} km • ${faults} anomalías detectadas • ${chk.workshopStatus}`,
+                          icon: (
+                            <ClipboardCheck className="w-3.5 h-3.5 text-rose-600" />
+                          ),
+                        });
+                      });
+
+                    // 3. Mantenimiento Preventivo
+                    preventiveSchedules
+                      .filter((p) => p.ambulanceId === selectedAmb.id)
+                      .forEach((sched) => {
+                        events.push({
+                          id: `tl-prev-${sched.id}`,
+                          date: sched.lastDoneDate,
+                          category: 'preventive',
+                          badge: `Preventivo (${sched.category})`,
+                          badgeClass: 'bg-blue-100 text-blue-800',
+                          title: sched.title,
+                          subtitle: `Último realizado: ${sched.lastDoneDate}${
+                            sched.lastDoneKm
+                              ? ` (${sched.lastDoneKm.toLocaleString()} km)`
+                              : ''
+                          } → Próximo: ${sched.nextDueDate || ''}${
+                            sched.nextDueKm
+                              ? ` / ${sched.nextDueKm.toLocaleString()} km`
+                              : ''
+                          }`,
+                          icon: (
+                            <CalendarClock className="w-3.5 h-3.5 text-blue-600" />
+                          ),
+                        });
+                      });
+
+                    // 4. Documentación y Vencimientos
+                    ensureAmbulanceDocuments(selectedAmb).forEach((doc) => {
+                      events.push({
+                        id: `tl-doc-${doc.id}`,
+                        date: doc.issueDate,
+                        category: 'documents',
+                        badge: `Documento: ${doc.type}`,
+                        badgeClass: 'bg-emerald-100 text-emerald-800',
+                        title: `${doc.type} (${doc.number})`,
+                        subtitle: `Emisión: ${doc.issueDate} • Vencimiento: ${doc.expiryDate}`,
+                        icon: (
+                          <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                        ),
+                      });
+                    });
+
+                    // 5. Movimientos de Stock vinculados al vehículo
+                    stockMovements
+                      .filter(
+                        (m) =>
+                          m.targetReference.includes(selectedAmb.code) ||
+                          m.targetReference.includes(selectedAmb.plate)
+                      )
+                      .forEach((mov) => {
+                        events.push({
+                          id: `tl-mov-${mov.id}`,
+                          date: mov.date.split(' ')[0],
+                          category: 'stock',
+                          badge: mov.type,
+                          badgeClass: 'bg-purple-100 text-purple-800',
+                          title: `${mov.partName} (${mov.sku}) — ${
+                            mov.quantityChange > 0
+                              ? `+${mov.quantityChange}`
+                              : mov.quantityChange
+                          } uds.`,
+                          subtitle: `Destino: ${mov.targetReference} • Usuario: ${mov.performedBy}${
+                            mov.notes ? ` • Nota: ${mov.notes}` : ''
+                          }`,
+                          icon: (
+                            <Package className="w-3.5 h-3.5 text-purple-600" />
+                          ),
+                        });
+                      });
+
+                    const filteredEvents = events
+                      .filter(
+                        (ev) =>
+                          historyFilter === 'all' ||
+                          ev.category === historyFilter
+                      )
+                      .sort((a, b) => b.date.localeCompare(a.date));
+
+                    if (filteredEvents.length === 0) {
+                      return (
+                        <p className="text-xs text-slate-500 py-4 text-center">
+                          No hay eventos registrados en esta categoría para{' '}
+                          {selectedAmb.code}.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="relative pl-5 border-l-2 border-slate-200 space-y-3 max-h-96 overflow-y-auto pr-1">
+                        {filteredEvents.map((ev) => (
+                          <div
+                            key={ev.id}
+                            className="relative p-3 rounded-xl border border-slate-200 bg-slate-50/60 text-xs"
+                          >
+                            <span className="absolute -left-[25px] top-3.5 w-3 h-3 rounded-full bg-white border-2 border-blue-600" />
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                              <div className="flex items-center gap-1.5">
+                                {ev.icon}
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${ev.badgeClass}`}
+                                >
+                                  {ev.badge}
+                                </span>
+                              </div>
+                              <span className="font-mono text-[11px] text-slate-500 font-semibold">
+                                {ev.date}
+                              </span>
+                            </div>
+                            <p className="font-bold text-slate-900">
+                              {ev.title}
+                            </p>
+                            <p className="text-slate-600 text-[11px] mt-0.5">
+                              {ev.subtitle}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

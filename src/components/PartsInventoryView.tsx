@@ -4,6 +4,7 @@ import {
   PartCategory,
   SparePart,
   StockMovement,
+  StockMovementType,
 } from '../types';
 import {
   Package,
@@ -17,6 +18,7 @@ import {
   History,
   MessageCircle,
   PackageCheck,
+  ArrowUpDown,
 } from 'lucide-react';
 
 interface PartsInventoryViewProps {
@@ -24,7 +26,15 @@ interface PartsInventoryViewProps {
   ambulances: Ambulance[];
   stockMovements: StockMovement[];
   onAddSparePart: (part: Omit<SparePart, 'id'>) => void;
-  onUpdatePartStock: (partId: string, delta: number) => void;
+  onUpdatePartStock: (partId: string, delta: number, notes?: string) => void;
+  onRecordCustomMovement?: (
+    partId: string,
+    type: StockMovementType,
+    quantity: number,
+    destination: string,
+    notes: string,
+    performedBy: string
+  ) => void;
   onRestockVehiclePart: (ambulanceId: string, partId: string) => void;
   onReceiveSupplierOrder: (partId: string, quantityToAdd: number) => void;
 }
@@ -35,6 +45,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
   stockMovements,
   onAddSparePart,
   onUpdatePartStock,
+  onRecordCustomMovement,
   onRestockVehiclePart,
   onReceiveSupplierOrder,
 }) => {
@@ -44,6 +55,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showMovementModal, setShowMovementModal] = useState(false);
 
   const [newPart, setNewPart] = useState({
     sku: '',
@@ -58,12 +70,23 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
     isVehicleOnboardStandard: false,
   });
 
+  const [newMovForm, setNewMovForm] = useState({
+    partId: spareParts[0]?.id || '',
+    type: 'Entrada' as StockMovementType,
+    quantity: 1,
+    destination: 'Almacén Central',
+    notes: '',
+    performedBy: 'Carlos Mendoza (Encargado)',
+  });
+
   const filteredParts = spareParts.filter((p) => {
     const matchesCategory =
       selectedCategory === 'Todas' || p.category === selectedCategory;
     const matchesQuery =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.warehouseLocation.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.supplier.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.compatibleModels.some((m) =>
         m.toLowerCase().includes(searchQuery.toLowerCase())
       );
@@ -75,8 +98,11 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
     0
   );
 
-  // Calcular Lista Automática de Pedido a Proveedores (3.1)
-  // Incluye piezas con stockQuantity <= minStockAlert O que falten a bordo de las ambulancias
+  const lowStockCount = spareParts.filter(
+    (p) => p.stockQuantity <= p.minStockAlert
+  ).length;
+
+  // Calcular Lista Automática de Pedido a Proveedores (sin importes)
   const supplierOrderLines = spareParts
     .map((part) => {
       const missingAcrossVehicles = ambulances.reduce((sum, amb) => {
@@ -112,12 +138,12 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
     const lines = supplierOrderLines
       .map(
         (l) =>
-          `• *${l.part.name}* (${l.part.sku}) → Pedir *${l.suggestedOrderQty} uds.* [Proveedor: ${l.part.supplier} | Stock actual: ${l.part.stockQuantity}]`
+          `• *${l.part.name}* (${l.part.sku}) → Solicitar *${l.suggestedOrderQty} uds.* [Proveedor: ${l.part.supplier} (${l.part.supplierContact || 'Sin contacto'}) | Stock actual: ${l.part.stockQuantity}]`
       )
       .join('\n');
 
     const text = [
-      `📦 *SOLICITUD DE PEDIDO DE REPUESTOS — AMBUFLEET TALLER*`,
+      `📦 *SOLICITUD DE PEDIDO DE REPUESTOS — AMBUFLEET FLOTA*`,
       `Fecha: ${new Date().toISOString().split('T')[0]}`,
       ``,
       lines,
@@ -151,6 +177,30 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
     setShowAddModal(false);
   };
 
+  const handleCreateCustomMovement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMovForm.partId || newMovForm.quantity <= 0) return;
+    if (onRecordCustomMovement) {
+      onRecordCustomMovement(
+        newMovForm.partId,
+        newMovForm.type,
+        newMovForm.quantity,
+        newMovForm.destination,
+        newMovForm.notes,
+        newMovForm.performedBy
+      );
+    } else {
+      const sign =
+        newMovForm.type === 'Salida a reparación' ||
+        newMovForm.type === 'Salida a vehículo'
+          ? -newMovForm.quantity
+          : newMovForm.quantity;
+      onUpdatePartStock(newMovForm.partId, sign, newMovForm.notes);
+    }
+    setShowMovementModal(false);
+    setNewMovForm({ ...newMovForm, notes: '', quantity: 1 });
+  };
+
   return (
     <div className="space-y-6">
       {/* Cabecera de Inventario y Selector de 4 Sub-Pestañas */}
@@ -165,7 +215,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             }`}
           >
             <Package className="w-4 h-4" />
-            Almacén Taller ({spareParts.length})
+            Almacén de Repuestos ({spareParts.length})
           </button>
 
           <button
@@ -177,7 +227,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             }`}
           >
             <Truck className="w-4 h-4" />
-            Stock por Vehículo ({ambulances.length})
+            Dotación a Bordo ({ambulances.length})
           </button>
 
           <button
@@ -189,7 +239,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             }`}
           >
             <ShoppingCart className="w-4 h-4" />
-            Pedido a Proveedores ({supplierOrderLines.length})
+            Pedidos a Proveedor ({supplierOrderLines.length})
           </button>
 
           <button
@@ -201,28 +251,39 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             }`}
           >
             <History className="w-4 h-4" />
-            Historial de Movimientos ({stockMovements.length})
+            Movimientos de Stock ({stockMovements.length})
           </button>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="text-right text-xs">
-            <span className="text-slate-400 block">Unidades en Almacén</span>
+            <span className="text-slate-400 block">
+              Stock Total ({lowStockCount} en alerta)
+            </span>
             <span className="text-sm font-extrabold text-slate-900">
               {totalUnitsInStock} uds.
             </span>
           </div>
           <button
+            type="button"
+            onClick={() => setShowMovementModal(true)}
+            className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5"
+          >
+            <ArrowUpDown className="w-4 h-4" />
+            Registrar Movimiento
+          </button>
+          <button
+            type="button"
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
-            Alta de Repuesto
+            Nuevo Repuesto
           </button>
         </div>
       </div>
 
-      {/* Sub-pestaña 1: Almacén General de Taller */}
+      {/* Sub-pestaña 1: Almacén Propio de Repuestos (Sin Costes) */}
       {subTab === 'warehouse' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200">
@@ -230,7 +291,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
-                placeholder="Buscar por nombre de pieza, referencia SKU o modelo compatible (ej. Sprinter, Crafter)..."
+                placeholder="Buscar por SKU, nombre, ubicación en almacén, proveedor o modelo compatible..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 text-xs"
@@ -266,12 +327,12 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase">
-                    <th className="py-3 px-4">SKU / Pieza</th>
+                    <th className="py-3 px-4">SKU / Repuesto</th>
                     <th className="py-3 px-4">Categoría</th>
                     <th className="py-3 px-4">Modelos Compatibles</th>
-                    <th className="py-3 px-4">Ubicación / Proveedor</th>
-                    <th className="py-3 px-4 text-center">Stock Actual</th>
-                    <th className="py-3 px-4 text-right">Ajuste Rápido</th>
+                    <th className="py-3 px-4">Ubicación Almacén / Proveedor</th>
+                    <th className="py-3 px-4 text-center">Cantidad / Mínimo</th>
+                    <th className="py-3 px-4 text-right">Movimiento Rápido</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -288,7 +349,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                           </span>
                           {part.isVehicleOnboardStandard && (
                             <span className="inline-block mt-1 text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                              Dotación a Bordo Vehículo
+                              Dotación a Bordo
                             </span>
                           )}
                         </td>
@@ -311,7 +372,14 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                           <strong className="text-slate-800 block">
                             {part.warehouseLocation}
                           </strong>
-                          <span>{part.supplier}</span>
+                          <span className="font-semibold text-slate-700">
+                            {part.supplier}
+                          </span>
+                          {part.supplierContact && (
+                            <span className="block text-[11px] text-slate-400">
+                              {part.supplierContact}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span
@@ -325,25 +393,43 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                             {part.stockQuantity} uds.
                           </span>
                           <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Mín: {part.minStockAlert}
+                            Stock mín: {part.minStockAlert}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="inline-flex items-center gap-1">
                             <button
-                              onClick={() => onUpdatePartStock(part.id, -1)}
+                              onClick={() =>
+                                onUpdatePartStock(
+                                  part.id,
+                                  -1,
+                                  'Ajuste rápido salida (-1)'
+                                )
+                              }
                               className="px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-100 font-bold"
                             >
                               -1
                             </button>
                             <button
-                              onClick={() => onUpdatePartStock(part.id, 1)}
+                              onClick={() =>
+                                onUpdatePartStock(
+                                  part.id,
+                                  1,
+                                  'Ajuste rápido entrada (+1)'
+                                )
+                              }
                               className="px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-100 font-bold"
                             >
                               +1
                             </button>
                             <button
-                              onClick={() => onUpdatePartStock(part.id, 5)}
+                              onClick={() =>
+                                onUpdatePartStock(
+                                  part.id,
+                                  5,
+                                  'Recepción lote almacén (+5)'
+                                )
+                              }
                               className="px-2.5 py-1 rounded bg-slate-900 text-white hover:bg-slate-800 font-semibold"
                             >
                               +5
@@ -360,7 +446,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
         </div>
       )}
 
-      {/* Sub-pestaña 2: Matriz de Stock de Piezas por Vehículo */}
+      {/* Sub-pestaña 2: Dotación a Bordo Obligatoria por Vehículo (OK / Falta) */}
       {subTab === 'vehicles' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {ambulances.map((amb) => {
@@ -383,17 +469,19 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                         {amb.brand} {amb.model} ({amb.plate})
                       </h3>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{amb.type}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {amb.type} • {amb.baseLocation}
+                    </p>
                   </div>
 
                   {missingTotal === 0 ? (
                     <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Dotación Completa
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Dotación OK
                     </span>
                   ) : (
                     <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-xs font-bold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" /> Faltan{' '}
-                      {missingTotal} piezas
+                      <AlertTriangle className="w-3.5 h-3.5" /> Falta (
+                      {missingTotal} uds.)
                     </span>
                   )}
                 </div>
@@ -407,17 +495,30 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                         className="py-2.5 flex items-center justify-between gap-2"
                       >
                         <div>
-                          <p className="font-semibold text-slate-800">
-                            {item.partName}
-                          </p>
-                          <p className="text-slate-500">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded font-extrabold text-[10px] ${
+                                isComplete
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-rose-600 text-white'
+                              }`}
+                            >
+                              {isComplete ? 'OK' : 'FALTA'}
+                            </span>
+                            <p className="font-semibold text-slate-800">
+                              {item.partName}
+                            </p>
+                          </div>
+                          <p className="text-slate-500 mt-0.5">
                             A bordo: <strong>{item.currentQty}</strong> / Exigido:{' '}
                             <strong>{item.requiredQty}</strong>
                           </p>
                         </div>
 
                         {isComplete ? (
-                          <span className="text-emerald-600 font-bold">OK</span>
+                          <span className="text-emerald-600 font-bold">
+                            Completo
+                          </span>
                         ) : (
                           <button
                             onClick={() =>
@@ -425,7 +526,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                             }
                             className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1"
                           >
-                            <RefreshCw className="w-3 h-3" /> Reponer desde Taller
+                            <RefreshCw className="w-3 h-3" /> Suministrar desde Almacén
                           </button>
                         )}
                       </div>
@@ -438,18 +539,17 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
         </div>
       )}
 
-      {/* Sub-pestaña 3: Lista Automática de Pedido a Proveedores (3.1) */}
+      {/* Sub-pestaña 3: Pedidos a Proveedor Opcionales (Sin Importes) */}
       {subTab === 'orders' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <ShoppingCart className="w-4 h-4 text-rose-600" />
-                Propuesta Automática de Pedido a Proveedores
+                Pedidos a Proveedores (Sin Importes — Basado en Stock Mínimo)
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Calculada cruzando las referencias bajo mínimo en almacén más las
-                piezas que faltan a bordo de las ambulancias.
+                Referencias con cantidad menor o igual al stock mínimo o pendientes de reponer en la dotación de las 21 ambulancias.
               </p>
             </div>
 
@@ -460,29 +560,28 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                 className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-xs"
               >
                 <MessageCircle className="w-4 h-4" />
-                Enviar Lista de Pedido por WhatsApp
+                Enviar Pedido a Proveedor por WhatsApp
               </button>
             )}
           </div>
 
           {supplierOrderLines.length === 0 ? (
             <div className="p-10 text-center text-xs text-slate-500">
-              Todas las referencias superan el stock mínimo. No hay pedidos
-              pendientes.
+              Todas las referencias superan el stock mínimo. No hay pedidos pendientes a proveedor.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-500 font-bold uppercase">
-                    <th className="py-3 px-4">Proveedor</th>
-                    <th className="py-3 px-4">Repuesto / SKU</th>
+                    <th className="py-3 px-4">Proveedor / Contacto</th>
+                    <th className="py-3 px-4">Repuesto / SKU / Ubicación</th>
                     <th className="py-3 px-4 text-center">Stock Almacén</th>
                     <th className="py-3 px-4 text-center">
                       Faltan en Ambulancias
                     </th>
                     <th className="py-3 px-4 text-center">Cantidad a Pedir</th>
-                    <th className="py-3 px-4 text-right">Recepción Mercancía</th>
+                    <th className="py-3 px-4 text-right">Recepción en Almacén</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -493,8 +592,13 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                       suggestedOrderQty,
                     }) => (
                       <tr key={part.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-bold text-slate-800">
-                          {part.supplier}
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-slate-800 block">
+                            {part.supplier}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            {part.supplierContact || 'Contacto general'}
+                          </span>
                         </td>
                         <td className="py-3 px-4">
                           <span className="font-bold text-slate-900 block">
@@ -528,7 +632,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                             className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold inline-flex items-center gap-1.5"
                           >
                             <PackageCheck className="w-3.5 h-3.5" />
-                            Recibir en Almacén
+                            Registrar Entrada
                           </button>
                         </td>
                       </tr>
@@ -541,19 +645,27 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
         </div>
       )}
 
-      {/* Sub-pestaña 4: Historial de Movimientos de Stock / Trazabilidad (3.2) */}
+      {/* Sub-pestaña 4: Historial de Movimientos de Stock (Entrada, Salida a reparación, Salida a vehículo, Ajuste) */}
       {subTab === 'movements' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 bg-slate-50 border-b border-slate-200">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <History className="w-4 h-4 text-blue-600" />
-              Historial de Movimientos y Trazabilidad de Piezas
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Registro automático de todas las salidas de repuestos hacia Órdenes
-              de Trabajo, reposiciones a bordo de ambulancias y entradas de
-              almacén.
-            </p>
+          <div className="p-5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <History className="w-4 h-4 text-blue-600" />
+                Movimientos de Stock (Entrada, Salida a reparación, Salida a vehículo y Ajuste)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Trazabilidad completa con fecha, cantidad, destino, notas y usuario que realiza la operación.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowMovementModal(true)}
+              className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Nuevo Movimiento Manual
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -561,11 +673,12 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
               <thead>
                 <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-500 font-bold uppercase">
                   <th className="py-3 px-4">Fecha / Hora</th>
-                  <th className="py-3 px-4">Tipo de Movimiento</th>
-                  <th className="py-3 px-4">Pieza / SKU</th>
-                  <th className="py-3 px-4 text-center">Variación</th>
-                  <th className="py-3 px-4">Ambulancia / Destino</th>
-                  <th className="py-3 px-4">Responsable</th>
+                  <th className="py-3 px-4">Tipo</th>
+                  <th className="py-3 px-4">Repuesto / SKU</th>
+                  <th className="py-3 px-4 text-center">Cantidad</th>
+                  <th className="py-3 px-4">Destino / Referencia</th>
+                  <th className="py-3 px-4">Notas</th>
+                  <th className="py-3 px-4">Usuario</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -610,7 +723,10 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                     <td className="py-3 px-4 font-semibold text-slate-800">
                       {mov.targetReference}
                     </td>
-                    <td className="py-3 px-4 text-slate-600">
+                    <td className="py-3 px-4 text-slate-500">
+                      {mov.notes || '-'}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600 font-medium">
                       {mov.performedBy}
                     </td>
                   </tr>
@@ -621,18 +737,160 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
         </div>
       )}
 
-      {/* Modal Alta de Nuevo Repuesto */}
-      {showAddModal && (
+      {/* Modal Registrar Movimiento de Stock */}
+      {showMovementModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <h3 className="text-base font-bold text-slate-900 mb-4">
+              Registrar Movimiento de Almacén
+            </h3>
+            <form onSubmit={handleCreateCustomMovement} className="space-y-3 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Repuesto
+                </label>
+                <select
+                  value={newMovForm.partId}
+                  onChange={(e) =>
+                    setNewMovForm({ ...newMovForm, partId: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                >
+                  {spareParts.map((sp) => (
+                    <option key={sp.id} value={sp.id}>
+                      {sp.sku} — {sp.name} (Actual: {sp.stockQuantity} uds.)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Tipo de Movimiento
+                  </label>
+                  <select
+                    value={newMovForm.type}
+                    onChange={(e) =>
+                      setNewMovForm({
+                        ...newMovForm,
+                        type: e.target.value as StockMovementType,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-semibold"
+                  >
+                    <option value="Entrada">Entrada</option>
+                    <option value="Salida a reparación">
+                      Salida a reparación
+                    </option>
+                    <option value="Salida a vehículo">Salida a vehículo</option>
+                    <option value="Ajuste">Ajuste</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Cantidad (uds.)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={newMovForm.quantity}
+                    onChange={(e) =>
+                      setNewMovForm({
+                        ...newMovForm,
+                        quantity: Number(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Destino / Referencia (Vehículo, Taller Externo o Almacén)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newMovForm.destination}
+                  onChange={(e) =>
+                    setNewMovForm({
+                      ...newMovForm,
+                      destination: e.target.value,
+                    })
+                  }
+                  placeholder="Ej. AMB-04 / Talleres DieselSur / Almacén Central"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Notas
+                </label>
+                <input
+                  type="text"
+                  value={newMovForm.notes}
+                  onChange={(e) =>
+                    setNewMovForm({ ...newMovForm, notes: e.target.value })
+                  }
+                  placeholder="Motivo o albarán de entrega sin importes..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Usuario
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newMovForm.performedBy}
+                  onChange={(e) =>
+                    setNewMovForm({
+                      ...newMovForm,
+                      performedBy: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowMovementModal(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                >
+                  Guardar Movimiento
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Alta de Nuevo Repuesto (Sin Costes) */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
-              Alta de Nueva Referencia en Almacén
+              Alta de Nueva Referencia en Almacén Propio
             </h3>
             <form onSubmit={handleCreatePart} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
-                    Código SKU
+                    Código SKU *
                   </label>
                   <input
                     type="text"
@@ -681,7 +939,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Nombre del Repuesto
+                  Nombre del Repuesto *
                 </label>
                 <input
                   type="text"
@@ -696,7 +954,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Modelos de Ambulancia Compatibles (separados por coma)
+                  Modelos Compatibles (separados por coma)
                 </label>
                 <input
                   type="text"
@@ -714,10 +972,11 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
-                    Stock Inicial
+                    Cantidad Actual
                   </label>
                   <input
                     type="number"
+                    min={0}
                     value={newPart.stockQuantity}
                     onChange={(e) =>
                       setNewPart({
@@ -734,6 +993,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                   </label>
                   <input
                     type="number"
+                    min={0}
                     value={newPart.minStockAlert}
                     onChange={(e) =>
                       setNewPart({
@@ -741,6 +1001,58 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                         minStockAlert: Number(e.target.value),
                       })
                     }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Ubicación en Almacén
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newPart.warehouseLocation}
+                  onChange={(e) =>
+                    setNewPart({
+                      ...newPart,
+                      warehouseLocation: e.target.value,
+                    })
+                  }
+                  placeholder="Ej. Almacén Central - Estante B2"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Proveedor (Nombre)
+                  </label>
+                  <input
+                    type="text"
+                    value={newPart.supplier}
+                    onChange={(e) =>
+                      setNewPart({ ...newPart, supplier: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Contacto Proveedor
+                  </label>
+                  <input
+                    type="text"
+                    value={newPart.supplierContact}
+                    onChange={(e) =>
+                      setNewPart({
+                        ...newPart,
+                        supplierContact: e.target.value,
+                      })
+                    }
+                    placeholder="Teléfono / Email"
                     className="w-full px-3 py-2 rounded-lg border border-slate-300"
                   />
                 </div>

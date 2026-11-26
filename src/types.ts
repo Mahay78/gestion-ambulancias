@@ -24,8 +24,11 @@ export interface VehicleDocument {
 export interface VehicleOnboardPart {
   partId: string;
   partName: string;
+  category?: string;
   requiredQty: number;
   currentQty: number;
+  status?: 'OK' | 'Falta';
+  notes?: string;
 }
 
 export interface Ambulance {

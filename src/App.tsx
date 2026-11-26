@@ -282,7 +282,8 @@ export function App() {
     type: StockMovementType,
     quantityChange: number,
     targetReference: string,
-    performedBy: string
+    performedBy: string,
+    notes?: string
   ) => {
     const now = new Date();
     const formattedDate = `${now.toISOString().split('T')[0]} ${now
@@ -297,6 +298,7 @@ export function App() {
       type,
       quantityChange,
       targetReference,
+      notes,
       performedBy,
     };
     setStockMovements((prev) => [newMov, ...prev]);
@@ -904,7 +906,11 @@ export function App() {
     ]);
   };
 
-  const handleUpdatePartStock = (partId: string, delta: number) => {
+  const handleUpdatePartStock = (
+    partId: string,
+    delta: number,
+    notes?: string
+  ) => {
     const part = spareParts.find((p) => p.id === partId);
     if (part) {
       recordStockMovement(
@@ -912,9 +918,46 @@ export function App() {
         'Ajuste',
         delta,
         `Almacén (${part.warehouseLocation})`,
-        `${currentRole} de Flota`
+        `${currentRole} de Flota`,
+        notes || 'Ajuste de inventario en almacén'
       );
     }
+    setSpareParts((prev) =>
+      prev.map((p) =>
+        p.id === partId
+          ? { ...p, stockQuantity: Math.max(0, p.stockQuantity + delta) }
+          : p
+      )
+    );
+  };
+
+  const handleRecordCustomMovement = (
+    partId: string,
+    type: StockMovementType,
+    quantity: number,
+    destination: string,
+    notes: string,
+    performedBy: string
+  ) => {
+    const part = spareParts.find((p) => p.id === partId);
+    if (!part) return;
+    const isOutbound =
+      type === 'Salida a reparación' || type === 'Salida a vehículo';
+    if (isOutbound && part.stockQuantity < quantity) {
+      alert(
+        `Stock insuficiente para "${part.name}". Disponible: ${part.stockQuantity} uds.`
+      );
+      return;
+    }
+    const delta = isOutbound ? -Math.abs(quantity) : Math.abs(quantity);
+    recordStockMovement(
+      part,
+      type,
+      delta,
+      destination,
+      performedBy,
+      notes || undefined
+    );
     setSpareParts((prev) =>
       prev.map((p) =>
         p.id === partId
@@ -1338,6 +1381,10 @@ export function App() {
             ambulances={ambulances}
             spareParts={spareParts}
             workOrders={workOrders}
+            checklists={checklists}
+            preventiveSchedules={preventiveSchedules}
+            stockMovements={stockMovements}
+            workshops={workshops}
             onAddAmbulance={handleAddAmbulance}
             onDeleteAmbulance={handleDeleteAmbulance}
             onUpdateStatus={handleUpdateAmbulanceStatus}
@@ -1408,6 +1455,7 @@ export function App() {
             stockMovements={stockMovements}
             onAddSparePart={handleAddSparePart}
             onUpdatePartStock={handleUpdatePartStock}
+            onRecordCustomMovement={handleRecordCustomMovement}
             onRestockVehiclePart={handleRestockVehiclePart}
             onReceiveSupplierOrder={handleReceiveSupplierOrder}
           />
