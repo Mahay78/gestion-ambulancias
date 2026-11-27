@@ -120,6 +120,8 @@ export const FleetView: React.FC<FleetViewProps> = ({
     'all' | 'orders' | 'incidents' | 'preventive' | 'documents' | 'stock'
   >('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [addSuccessMsg, setAddSuccessMsg] = useState('');
   const [showPlateScanner, setShowPlateScanner] = useState(false);
   const [confirmDeleteAmb, setConfirmDeleteAmb] = useState<Ambulance | null>(null);
   const [mileageInput, setMileageInput] = useState<string>('');
@@ -173,18 +175,36 @@ export const FleetView: React.FC<FleetViewProps> = ({
       code: nextCode,
       plate: '',
     });
+    setAddError('');
     setShowAddModal(true);
   };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAmb.plate.trim()) return;
+    setAddError('');
+    if (!newAmb.code.trim()) {
+      setAddError('Introduce el código de la unidad (ej. AMB-22).');
+      return;
+    }
+    if (!newAmb.plate.trim()) {
+      setAddError('Introduce la matrícula del vehículo.');
+      return;
+    }
+    if (!newAmb.brand.trim() || !newAmb.model.trim()) {
+      setAddError('Introduce la marca y el modelo del vehículo.');
+      return;
+    }
+
+    const cleanCode = newAmb.code.trim().toUpperCase();
+    const cleanPlate = newAmb.plate.trim().toUpperCase();
     const createdId = onAddAmbulance({
       ...newAmb,
-      code: newAmb.code.trim().toUpperCase(),
-      plate: newAmb.plate.trim().toUpperCase(),
+      code: cleanCode,
+      plate: cleanPlate,
+      year: Number(newAmb.year) || new Date().getFullYear(),
+      mileage: Math.max(0, Number(newAmb.mileage) || 0),
       lastServiceDate: getLocalDateString(),
-      lastServiceMileage: newAmb.mileage,
+      lastServiceMileage: Math.max(0, Number(newAmb.mileage) || 0),
       onboardParts: [
         {
           partId: 'part-10',
@@ -217,6 +237,8 @@ export const FleetView: React.FC<FleetViewProps> = ({
       setSelectedAmbId(createdId);
     }
     setShowAddModal(false);
+    setAddSuccessMsg(`✅ Unidad ${cleanCode} (${cleanPlate}) añadida correctamente.`);
+    setTimeout(() => setAddSuccessMsg(''), 4000);
   };
 
   const handleConfirmDelete = () => {
@@ -326,6 +348,12 @@ export const FleetView: React.FC<FleetViewProps> = ({
           </button>
         </div>
       </div>
+
+      {addSuccessMsg && (
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold">
+          {addSuccessMsg}
+        </div>
+      )}
 
       {showQrLabels && (
         <QrLabelsModal
@@ -1419,7 +1447,12 @@ export const FleetView: React.FC<FleetViewProps> = ({
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               Añadir Nueva Unidad (Ambulancia) a la Flota
             </h3>
-            <form onSubmit={handleCreate} className="space-y-4 text-xs">
+            <form onSubmit={handleCreate} noValidate className="space-y-4 text-xs">
+              {addError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold">
+                  ⚠️ {addError}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
