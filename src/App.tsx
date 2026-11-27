@@ -96,7 +96,9 @@ import {
   Eye,
   EyeOff,
   Menu,
+  Sparkles,
 } from 'lucide-react';
+import { AiAssistantModal } from './components/AiAssistantModal';
 
 type ActiveTab =
   | 'dashboard'
@@ -217,6 +219,7 @@ export function App() {
   const [useFirebaseEmailLogin, setUseFirebaseEmailLogin] = useState<boolean>(false);
   const [firebaseEmail, setFirebaseEmail] = useState<string>('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+  const [showAiModal, setShowAiModal] = useState<boolean>(false);
   const [isUnitReportMode, setIsUnitReportMode] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -2040,6 +2043,14 @@ export function App() {
         <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
           <button
             type="button"
+            onClick={() => setShowAiModal(true)}
+            className="w-full py-2 px-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Asistente IA (Gratis)
+          </button>
+          <button
+            type="button"
             onClick={() => {
               const link = `${window.location.origin}${window.location.pathname}?modo=parte`;
               navigator.clipboard?.writeText(link);
@@ -2697,6 +2708,30 @@ export function App() {
             </form>
           </div>
         </div>
+      )}
+      {/* Botón flotante global de Asistente IA */}
+      <button
+        type="button"
+        onClick={() => setShowAiModal(true)}
+        title="Abrir Asistente IA de Flota (Gratis)"
+        className="fixed bottom-5 right-5 z-40 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-extrabold flex items-center gap-2 shadow-xl shadow-indigo-950/30 ring-2 ring-white/30"
+      >
+        <Sparkles className="w-4 h-4" />
+        <span className="hidden sm:inline">Asistente IA</span>
+      </button>
+
+      {showAiModal && (
+        <AiAssistantModal
+          fleetContext={{
+            ambulances,
+            workshops,
+            workOrders,
+            checklists,
+            preventiveSchedules,
+            spareParts,
+          }}
+          onClose={() => setShowAiModal(false)}
+        />
       )}
     </div>
   );

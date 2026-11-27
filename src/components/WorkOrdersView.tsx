@@ -17,6 +17,7 @@ import {
   printPartsDeliveryNote,
 } from '../utils/shareAndPrint';
 import { detectActiveWarranties } from '../utils/warrantyDetector';
+import { suggestLocalBreakdownTriage } from '../utils/aiAssistant';
 import {
   Plus,
   PackagePlus,
@@ -31,6 +32,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   FileCheck2,
+  Sparkles,
 } from 'lucide-react';
 
 interface WorkOrdersViewProps {
@@ -989,9 +991,30 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Motivo de la Reparación *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-700 block">
+                    Motivo de la Reparación *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const triage = suggestLocalBreakdownTriage(
+                        `${newWo.title} ${newWo.description}`,
+                        workshops
+                      );
+                      setNewWo((prev) => ({
+                        ...prev,
+                        priority: triage.priority,
+                        workshopId:
+                          triage.recommendedWorkshopId || prev.workshopId,
+                      }));
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-[11px] flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Sugerir Taller y Prioridad (IA)
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
