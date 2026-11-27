@@ -19,8 +19,11 @@ import {
   onSnapshot,
   persistentLocalCache,
   persistentMultipleTabManager,
+  query,
   setDoc,
+  where,
 } from 'firebase/firestore';
+import { submitUnitReportToDriveFallback } from './driveSync';
 
 export const DEFAULT_FIREBASE_CONFIG = {
   projectId: 'gestion-ambulancias-flota',
@@ -362,12 +365,20 @@ export const publishPublicPlates = async (
   apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
 ): Promise<void> => {
   try {
+    const sig = JSON.stringify(plates);
+    const sigKey = `ambufleet_plates_sig_${projectId}`;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(sigKey) === sig) {
+      return;
+    }
     const { db } = getFirebaseServices(projectId, apiKey);
     await ensureFirebaseAuthSession(projectId, apiKey);
     await setDoc(doc(db, 'ambufleet_public', 'plates'), {
       items: plates,
       updatedAt: new Date().toISOString(),
     });
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(sigKey, sig);
+    }
   } catch {
     // Silencioso si no hay conexión o auth
   }
@@ -452,7 +463,7 @@ export const submitUnitBreakdownReport = async (
   report: Omit<UnitBreakdownReport, 'status'>,
   projectId = DEFAULT_FIREBASE_CONFIG.projectId,
   apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
-): Promise<{ ok: boolean; error?: string }> => {
+): Promise<{ ok: boolean; viaDriveFallback?: boolean; error?: string }> => {
   const sanitized = Object.fromEntries(
     Object.entries({ ...report, status: 'pending' }).filter(
       ([, v]) => v !== undefined
@@ -489,10 +500,17 @@ export const submitUnitBreakdownReport = async (
           restErr instanceof Error
             ? restErr.message
             : 'No se pudo enviar el parte a Firebase.';
+        // Si Firebase agota cuota (429) o falla la red, usar respaldo gratuito en Google Drive/Sheets
+        const driveRes = await submitUnitReportToDriveFallback(report);
+        if (driveRes.ok) {
+          return { ok: true, viaDriveFallback: true };
+        }
         return {
           ok: false,
           error:
-            restMsg.includes('TIMEOUT')
+            restMsg.includes('429') || restMsg.includes('RESOURCE_EXHAUSTED')
+              ? `Cuota diaria de Firebase agotada y fallo en respaldo Drive: ${driveRes.error || 'revisa el script de Drive'}`
+              : restMsg.includes('TIMEOUT')
               ? 'Tiempo de espera agotado al conectar con Firebase. Revisa tu conexión a internet.'
               : restMsg,
         };
@@ -515,9 +533,12 @@ export const subscribePendingUnitReports = (
   apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
 ): (() => void) => {
   const { db } = getFirebaseServices(projectId, apiKey);
-  const colRef = collection(db, 'ambufleet_unit_reports');
+  const pendingQuery = query(
+    collection(db, 'ambufleet_unit_reports'),
+    where('status', '==', 'pending')
+  );
 
-  return onSnapshot(colRef, (snapshot) => {
+  return onSnapshot(pendingQuery, (snapshot) => {
     const pending: UnitBreakdownReport[] = [];
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() as UnitBreakdownReport;

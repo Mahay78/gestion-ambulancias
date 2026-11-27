@@ -298,3 +298,82 @@ export const appendClosedReportToGoogleSheet = async (record: {
     };
   }
 };
+
+export interface DriveUnitReport {
+  id: string;
+  ambulanceId?: string;
+  ambulanceCode?: string;
+  plate: string;
+  reporterName: string;
+  mileage: number;
+  reportType?: 'averia' | 'dotacion';
+  urgency: 'Normal' | 'Prioritaria' | 'Inmovilización Inmediata';
+  description: string;
+  photos: string[];
+  date: string;
+  createdAtIso: string;
+  status: 'pending' | 'imported';
+}
+
+export const submitUnitReportToDriveFallback = async (
+  report: Omit<DriveUnitReport, 'status'>
+): Promise<{ ok: boolean; error?: string }> => {
+  const webhookUrl = getDriveWebhookUrl();
+  if (!webhookUrl) {
+    return { ok: false, error: 'Webhook de Google Drive no configurado.' };
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'submit_unit_report',
+        report: {
+          ...report,
+          photos: [],
+        },
+      }),
+    });
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status} al guardar parte en Google Drive.` };
+    }
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Error de red al guardar en Google Drive.',
+    };
+  }
+};
+
+export const fetchPendingUnitReportsFromDrive = async (): Promise<DriveUnitReport[]> => {
+  const webhookUrl = getDriveWebhookUrl();
+  if (!webhookUrl) return [];
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'get_pending_unit_reports' }),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { ok?: boolean; reports?: DriveUnitReport[] };
+    return data.ok && Array.isArray(data.reports) ? data.reports : [];
+  } catch {
+    return [];
+  }
+};
+
+export const markUnitReportImportedInDrive = async (reportId: string): Promise<void> => {
+  const webhookUrl = getDriveWebhookUrl();
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'mark_unit_report_imported', reportId }),
+    });
+  } catch {
+    // ignorar
+  }
+};

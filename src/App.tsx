@@ -119,6 +119,8 @@ import {
   uploadDataUrlToUnitFolder,
   openGoogleDriveFolder,
   appendClosedReportToGoogleSheet,
+  fetchPendingUnitReportsFromDrive,
+  markUnitReportImportedInDrive,
 } from './utils/driveSync';
 import {
   LayoutDashboard,
@@ -569,111 +571,131 @@ export function App() {
       cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId;
     const key = cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey;
 
-    const unsubReports = subscribePendingUnitReports(
-      (reports: UnitBreakdownReport[]) => {
-        const freshReports = reports.filter(
-          (r) => !seenUnitReportIdsRef.current.has(r.id)
+    const handleIncomingUnitReports = (
+      reports: UnitBreakdownReport[],
+      fromDrive = false
+    ) => {
+      const freshReports = reports.filter(
+        (r) => !seenUnitReportIdsRef.current.has(r.id)
+      );
+      if (freshReports.length > 0) {
+        freshReports.forEach((r) => seenUnitReportIdsRef.current.add(r.id));
+        const first = freshReports[0];
+        const isUrgent =
+          first.urgency === 'Inmovilización Inmediata' ||
+          first.urgency === 'Prioritaria';
+        if (alarmSoundEnabled) {
+          playIncomingUnitAlarm(isUrgent);
+        }
+        vibrateMobileAlarm(isUrgent);
+        const matchedForAlert =
+          ambulances.find((a) => a.id === first.ambulanceId) ||
+          ambulances.find(
+            (a) =>
+              a.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() ===
+              first.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+          );
+        setIncomingUnitAlert({
+          plate: first.plate,
+          code: matchedForAlert?.code || first.ambulanceCode || 'Unidad',
+          urgency: first.urgency,
+          description: first.description,
+          reporterName: first.reporterName,
+          ambulanceId: matchedForAlert?.id,
+          count: freshReports.length,
+        });
+        void showLocalNotification(
+          `🚨 Nuevo parte de ${matchedForAlert?.code || first.plate} (${first.urgency})`,
+          `${first.reporterName}: ${first.description}`,
+          `unit-report-${first.id}`
         );
-        if (freshReports.length > 0) {
-          freshReports.forEach((r) => seenUnitReportIdsRef.current.add(r.id));
-          const first = freshReports[0];
-          const isUrgent =
-            first.urgency === 'Inmovilización Inmediata' ||
-            first.urgency === 'Prioritaria';
-          if (alarmSoundEnabled) {
-            playIncomingUnitAlarm(isUrgent);
+      }
+      setChecklists((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const incoming: FleetChecklist[] = [];
+        for (const rep of reports) {
+          if (existingIds.has(rep.id)) {
+            if (fromDrive) void markUnitReportImportedInDrive(rep.id);
+            else markUnitReportImported(rep.id, pid, key);
+            continue;
           }
-          vibrateMobileAlarm(isUrgent);
-          const matchedForAlert =
-            ambulances.find((a) => a.id === first.ambulanceId) ||
+          const matchedAmb =
+            ambulances.find((a) => a.id === rep.ambulanceId) ||
             ambulances.find(
               (a) =>
                 a.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() ===
-                first.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+                rep.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
             );
-          setIncomingUnitAlert({
-            plate: first.plate,
-            code: matchedForAlert?.code || first.ambulanceCode || 'Unidad',
-            urgency: first.urgency,
-            description: first.description,
-            reporterName: first.reporterName,
-            ambulanceId: matchedForAlert?.id,
-            count: freshReports.length,
-          });
-          void showLocalNotification(
-            `🚨 Nuevo parte de ${matchedForAlert?.code || first.plate} (${first.urgency})`,
-            `${first.reporterName}: ${first.description}`,
-            `unit-report-${first.id}`
-          );
-        }
-        setChecklists((prev) => {
-          const existingIds = new Set(prev.map((c) => c.id));
-          const incoming: FleetChecklist[] = [];
-          for (const rep of reports) {
-            if (existingIds.has(rep.id)) {
-              markUnitReportImported(rep.id, pid, key);
-              continue;
-            }
-            const matchedAmb =
-              ambulances.find((a) => a.id === rep.ambulanceId) ||
-              ambulances.find(
-                (a) =>
-                  a.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() ===
-                  rep.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-              );
 
-            const isDotacion = rep.reportType === 'dotacion';
-            incoming.push({
-              id: rep.id,
-              ambulanceId: matchedAmb?.id || ambulances[0]?.id || 'amb-1',
-              date: rep.date || getLocalDateString(),
-              inspectorName: `${rep.reporterName} (Unidad ${rep.plate})`,
-              mileageAtInspection: rep.mileage || matchedAmb?.mileage || 0,
-              overallUrgency: rep.urgency,
-              items: [
-                {
-                  id: `unit-item-${rep.id}`,
-                  section: isDotacion
-                    ? 'Célula Sanitaria y Camilla'
-                    : 'Motor y Niveles',
-                  label: isDotacion
-                    ? `Problema de dotación reportado (${rep.plate})`
-                    : `Avería reportada desde unidad (${rep.plate})`,
-                  status: 'Avería',
-                  comment: rep.description,
-                },
-              ],
-              missingParts: isDotacion
-                ? [
-                    {
-                      partId: `unit-dot-${rep.id}`,
-                      partName: rep.description,
-                      missingQty: 1,
-                      actionRequired: 'Reponer en vehículo',
-                    },
-                  ]
-                : [],
-              generalObservations: isDotacion
-                ? `[DOTACIÓN UNIDAD • ${rep.plate}] ${rep.description}`
-                : `[PARTE UNIDAD • ${rep.plate}] ${rep.description}`,
-              workshopStatus: 'Pendiente de Asignar Taller',
-              photos: rep.photos || [],
-            });
-            markUnitReportImported(rep.id, pid, key);
-          }
-          if (incoming.length === 0) return prev;
-          setFirebaseStatusMsg(
-            `🚨 Recibido(s) ${incoming.length} parte(s) de avería desde unidad.`
-          );
-          return [...incoming, ...prev];
-        });
-      },
+          const isDotacion = rep.reportType === 'dotacion';
+          incoming.push({
+            id: rep.id,
+            ambulanceId: matchedAmb?.id || ambulances[0]?.id || 'amb-1',
+            date: rep.date || getLocalDateString(),
+            inspectorName: `${rep.reporterName} (Unidad ${rep.plate})`,
+            mileageAtInspection: rep.mileage || matchedAmb?.mileage || 0,
+            overallUrgency: rep.urgency,
+            items: [
+              {
+                id: `unit-item-${rep.id}`,
+                section: isDotacion
+                  ? 'Célula Sanitaria y Camilla'
+                  : 'Motor y Niveles',
+                label: isDotacion
+                  ? `Problema de dotación reportado (${rep.plate})`
+                  : `Avería reportada desde unidad (${rep.plate})`,
+                status: 'Avería',
+                comment: rep.description,
+              },
+            ],
+            missingParts: isDotacion
+              ? [
+                  {
+                    partId: `unit-dot-${rep.id}`,
+                    partName: rep.description,
+                    missingQty: 1,
+                    actionRequired: 'Reponer en vehículo',
+                  },
+                ]
+              : [],
+            generalObservations: isDotacion
+              ? `[DOTACIÓN UNIDAD • ${rep.plate}] ${rep.description}`
+              : `[PARTE UNIDAD • ${rep.plate}] ${rep.description}`,
+            workshopStatus: 'Pendiente de Asignar Taller',
+            photos: rep.photos || [],
+          });
+          if (fromDrive) void markUnitReportImportedInDrive(rep.id);
+          else markUnitReportImported(rep.id, pid, key);
+        }
+        if (incoming.length === 0) return prev;
+        setFirebaseStatusMsg(
+          `🚨 Recibido(s) ${incoming.length} parte(s) de avería desde unidad.`
+        );
+        return [...incoming, ...prev];
+      });
+    };
+
+    const unsubReports = subscribePendingUnitReports(
+      (reports: UnitBreakdownReport[]) => handleIncomingUnitReports(reports, false),
       pid,
       key
     );
 
-    return () => unsubReports();
-  }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline, ambulances]);
+    const checkDriveReports = () => {
+      void fetchPendingUnitReportsFromDrive().then((driveReps) => {
+        if (driveReps.length > 0) {
+          handleIncomingUnitReports(driveReps, true);
+        }
+      });
+    };
+    checkDriveReports();
+    const driveInterval = window.setInterval(checkDriveReports, 60000);
+
+    return () => {
+      unsubReports();
+      window.clearInterval(driveInterval);
+    };
+  }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline]);
 
   // Suscripción en tiempo real a la base de datos de partes cerrados (ambufleet_closed_reports)
   useEffect(() => {

@@ -122,6 +122,111 @@ function doPost(e) {
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 2c. Respaldo gratuito de Partes Rápidos por Unidad (cuando Firestore agota cuota o falla)
+    if (payload.action === 'submit_unit_report' && payload.report) {
+      var repSheetName = 'Partes_Rapidos_Pendientes';
+      var repFiles = rootFolder.getFilesByName(repSheetName);
+      var repSs;
+      if (repFiles.hasNext()) {
+        repSs = SpreadsheetApp.open(repFiles.next());
+      } else {
+        repSs = SpreadsheetApp.create(repSheetName);
+        var repCreated = DriveApp.getFileById(repSs.getId());
+        rootFolder.addFile(repCreated);
+        DriveApp.getRootFolder().removeFile(repCreated);
+        var repInit = repSs.getSheets()[0];
+        repInit.setName('Pendientes');
+        repInit.appendRow([
+          'ID',
+          'Status',
+          'Fecha',
+          'CreatedAtIso',
+          'AmbulanceId',
+          'AmbulanceCode',
+          'Matricula',
+          'ReporterName',
+          'Km',
+          'ReportType',
+          'Urgency',
+          'Description',
+        ]);
+        repInit.getRange(1, 1, 1, 12).setFontWeight('bold');
+      }
+      var rep = payload.report;
+      var repSheet = repSs.getSheetByName('Pendientes') || repSs.getSheets()[0];
+      repSheet.appendRow([
+        rep.id || '',
+        'pending',
+        rep.date || '',
+        rep.createdAtIso || '',
+        rep.ambulanceId || '',
+        rep.ambulanceCode || '',
+        rep.plate || '',
+        rep.reporterName || '',
+        rep.mileage || 0,
+        rep.reportType || 'averia',
+        rep.urgency || 'Prioritaria',
+        rep.description || '',
+      ]);
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: true, sheetUrl: repSs.getUrl(), rootFolderUrl: rootFolder.getUrl() })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (payload.action === 'get_pending_unit_reports') {
+      var pendFiles = rootFolder.getFilesByName('Partes_Rapidos_Pendientes');
+      if (!pendFiles.hasNext()) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: true, reports: [] })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var pendSs = SpreadsheetApp.open(pendFiles.next());
+      var pendSheet = pendSs.getSheetByName('Pendientes') || pendSs.getSheets()[0];
+      var values = pendSheet.getDataRange().getValues();
+      var pendingList = [];
+      for (var i = 1; i < values.length; i++) {
+        var row = values[i];
+        if (String(row[1]) === 'pending' && row[0]) {
+          pendingList.push({
+            id: String(row[0]),
+            status: 'pending',
+            date: String(row[2] || ''),
+            createdAtIso: String(row[3] || ''),
+            ambulanceId: row[4] ? String(row[4]) : undefined,
+            ambulanceCode: row[5] ? String(row[5]) : undefined,
+            plate: String(row[6] || ''),
+            reporterName: String(row[7] || ''),
+            mileage: Number(row[8] || 0),
+            reportType: String(row[9] || 'averia'),
+            urgency: String(row[10] || 'Prioritaria'),
+            description: String(row[11] || ''),
+            photos: [],
+          });
+        }
+      }
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: true, reports: pendingList })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (payload.action === 'mark_unit_report_imported' && payload.reportId) {
+      var markFiles = rootFolder.getFilesByName('Partes_Rapidos_Pendientes');
+      if (markFiles.hasNext()) {
+        var markSs = SpreadsheetApp.open(markFiles.next());
+        var markSheet = markSs.getSheetByName('Pendientes') || markSs.getSheets()[0];
+        var markValues = markSheet.getDataRange().getValues();
+        for (var j = 1; j < markValues.length; j++) {
+          if (String(markValues[j][0]) === String(payload.reportId)) {
+            markSheet.getRange(j + 1, 2).setValue('imported');
+            break;
+          }
+        }
+      }
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: true })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
     // 3. Subida de archivos/fotos/backups organizados por subcarpeta
     var targetFolder = rootFolder;
     if (payload.subfolder) {
