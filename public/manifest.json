@@ -1,6 +1,6 @@
 {
-  "name": "Ambu-lz - Gestión de Flota de Ambulancias",
-  "short_name": "Ambu-lz",
+  "name": "Ambu-lzflota - Gestión de Flota de Ambulancias",
+  "short_name": "Ambu-lzflota",
   "description": "Gestión de flota de 21 ambulancias, documentación y vencimientos, talleres externos, incidencias y stock propio de repuestos.",
   "start_url": "./",
   "display": "standalone",

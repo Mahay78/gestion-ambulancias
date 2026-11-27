@@ -195,7 +195,7 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px;">
         <div>
-          <h1 style="font-size:18px;margin:0;">AMBU-LZ — PARTE DE INSPECCIÓN A TALLER</h1>
+          <h1 style="font-size:18px;margin:0;">AMBU-LZFLOTA — PARTE DE INSPECCIÓN A TALLER</h1>
           <p style="font-size:12px;color:#475569;margin:4px 0 0;">Checklist del Responsable de Flota y Auditoría de Stock del Vehículo</p>
         </div>
         <div style="text-align:right;font-size:12px;">
@@ -325,7 +325,7 @@ export const printWorkOrderReport = (
           <h1 style="font-size:18px;margin:0;">ORDEN DE REPARACIÓN EXTERNA — ${escapeHtml(
             wo.code
           )}</h1>
-          <p style="font-size:12px;color:#475569;margin:4px 0 0;">Ambu-lz • Gestión de Flota de Ambulancias</p>
+          <p style="font-size:12px;color:#475569;margin:4px 0 0;">Ambu-lzflota • Gestión de Flota de Ambulancias</p>
         </div>
         <div style="text-align:right;font-size:12px;">
           <strong>Estado:</strong> ${escapeHtml(wo.status)}<br/>
@@ -467,7 +467,7 @@ export const printPartsDeliveryNote = (
       <div style="border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end;">
         <div>
           <h1 style="margin:0;font-size:20px;">ALBARÁN DE ENTREGA DE REPUESTOS PROPIOS</h1>
-          <p style="margin:4px 0 0;font-size:12px;color:#475569;">Ambu-lz Gestión de Flota (Material de almacén propio sin cargo económico)</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#475569;">Ambu-lzflota Gestión de Flota (Material de almacén propio sin cargo económico)</p>
         </div>
         <div style="text-align:right;">
           <div style="font-size:16px;font-weight:900;color:#e11d48;">${escapeHtml(wo.code)}</div>
@@ -562,7 +562,7 @@ export const exportFleetAndStockToCSV = (
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ambu-lz_flota_y_stock_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = `ambu-lzflota_flota_y_stock_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 };

@@ -1209,7 +1209,7 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ambu-lz_copia_seguridad_${
+    a.download = `ambu-lzflota_copia_seguridad_${
       new Date().toISOString().split('T')[0]
     }.json`;
     a.click();
@@ -1495,7 +1495,7 @@ export function App() {
             </div>
             <div>
               <h1 className="text-lg font-extrabold text-slate-900">
-                Ambu-<span className="text-rose-600">lz</span>
+                Ambu-<span className="text-rose-600">lzflota</span>
               </h1>
               <p className="text-xs text-slate-500">
                 Gestión de 21 Ambulancias y Talleres Externos
@@ -1619,7 +1619,7 @@ export function App() {
               type="submit"
               className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition"
             >
-              Entrar a Ambu-lz
+              Entrar a Ambu-lzflota
             </button>
           </form>
         </div>
@@ -1639,7 +1639,7 @@ export function App() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-lg font-extrabold tracking-tight truncate">
-                  Ambu-<span className="text-rose-400">lz</span>
+                  Ambu-<span className="text-rose-400">lzflota</span>
                 </h1>
                 <span className="hidden md:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                   21 Ambulancias • Talleres Externos

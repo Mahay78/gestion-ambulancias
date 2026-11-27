@@ -97,7 +97,7 @@ export const checkAndNotifyCriticalExpiries = async (
     .map((a) => `${a.ambulanceCode} (${a.document.type})`)
     .join(', ');
 
-  const title = `Ambu-lz: ${critical.length} vencimiento(s) crítico(s)`;
+  const title = `Ambu-lzflota: ${critical.length} vencimiento(s) crítico(s)`;
   const body = `Vencidos: ${expiredCount} | ≤7d: ${days7Count} | ≤15d: ${days15Count}. Revisa: ${topPreview}${critical.length > 3 ? '...' : ''}`;
 
   const sent = await showLocalNotification(title, body);

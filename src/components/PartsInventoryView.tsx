@@ -146,7 +146,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
       .join('\n');
 
     const text = [
-      `📦 *SOLICITUD DE PEDIDO DE REPUESTOS — AMBU-LZ*`,
+      `📦 *SOLICITUD DE PEDIDO DE REPUESTOS — AMBU-LZFLOTA*`,
       `Fecha: ${new Date().toISOString().split('T')[0]}`,
       ``,
       lines,

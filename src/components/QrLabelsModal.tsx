@@ -78,7 +78,7 @@ export const QrLabelsModal: React.FC<QrLabelsModalProps> = ({
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Etiquetas QR Flota Ambu-lz (A4)</title>
+  <title>Etiquetas QR Flota Ambu-lzflota (A4)</title>
   <style>
     @page { size: A4 portrait; margin: 10mm; }
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
@@ -98,7 +98,7 @@ export const QrLabelsModal: React.FC<QrLabelsModalProps> = ({
 </head>
 <body>
   <div class="toolbar">
-    <strong>Ambu-lz — Etiquetas QR de Puerta (${selectedAmbs.length} unidades)</strong>
+    <strong>Ambu-lzflota — Etiquetas QR de Puerta (${selectedAmbs.length} unidades)</strong>
     <button class="btn" onclick="window.print()">Imprimir / Guardar PDF (A4)</button>
   </div>
   <div class="grid">${cardsHtml}</div>

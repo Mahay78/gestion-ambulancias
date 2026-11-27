@@ -35,10 +35,10 @@ export const exportFleetCalendarIcs = (
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Ambu-lz//Gestion Flota Ambulancias//ES',
+    'PRODID:-//Ambu-lzflota//Gestion Flota Ambulancias//ES',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:Ambu-lz - Vencimientos y Preventivos',
+    'X-WR-CALNAME:Ambu-lzflota - Vencimientos y Preventivos',
   ];
 
   ambulances.forEach((amb) => {
@@ -106,7 +106,7 @@ export const exportFleetCalendarIcs = (
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `Ambu-lz_Vencimientos_${new Date().toISOString().split('T')[0]}.ics`;
+  link.download = `Ambu-lzflota_Vencimientos_${new Date().toISOString().split('T')[0]}.ics`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
