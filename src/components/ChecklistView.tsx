@@ -88,7 +88,7 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
     FleetChecklist['overallUrgency']
   >('Prioritaria');
   const [generalObservations, setGeneralObservations] = useState<string>('');
-  const [autoGenerateOT, setAutoGenerateOT] = useState<boolean>(true);
+  const [autoGenerateOT, setAutoGenerateOT] = useState<boolean>(false);
   const [generalPhotos, setGeneralPhotos] = useState<string[]>([]);
   const [inspectorSignature, setInspectorSignature] = useState<string>('');
   const [showPlateScanner, setShowPlateScanner] = useState<boolean>(false);
@@ -857,8 +857,7 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                   onChange={(e) => setAutoGenerateOT(e.target.checked)}
                   className="w-4 h-4 rounded text-blue-600"
                 />
-                Generar Orden de Trabajo (OT) automáticamente con las fotos y firma,
-                y pasar la ambulancia a "En Taller"
+                Generar Orden de Trabajo (OT) automática ahora (desmarcado = pasan a la Pizarra para elegir qué averías mandar a taller)
               </label>
 
               <button
