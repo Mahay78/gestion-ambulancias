@@ -38,6 +38,8 @@ import {
   CalendarClock,
   Package,
   QrCode,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { PlateScannerModal } from './PlateScannerModal';
 import { QrLabelsModal } from './QrLabelsModal';
@@ -128,6 +130,21 @@ export const FleetView: React.FC<FleetViewProps> = ({
   const [previewDocFile, setPreviewDocFile] = useState<{ title: string; url: string } | null>(
     null
   );
+  const [openSections, setOpenSections] = useState<
+    Record<'docs' | 'onboard' | 'stock' | 'visual' | 'history', boolean>
+  >({
+    docs: false,
+    onboard: false,
+    stock: false,
+    visual: false,
+    history: false,
+  });
+
+  const toggleSection = (
+    key: 'docs' | 'onboard' | 'stock' | 'visual' | 'history'
+  ) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Estado para añadir nueva pieza a la dotación del vehículo seleccionado
   const [newOnboardPartId, setNewOnboardPartId] = useState<string>(
@@ -724,19 +741,68 @@ export const FleetView: React.FC<FleetViewProps> = ({
                   );
                 })()}
 
+                {/* Barra rápida de Expandir / Plegar secciones de la ficha */}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Secciones de la ficha (toca para desplegar)
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenSections({
+                          docs: true,
+                          onboard: true,
+                          stock: true,
+                          visual: true,
+                          history: true,
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition"
+                    >
+                      Expandir todo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenSections({
+                          docs: false,
+                          onboard: false,
+                          stock: false,
+                          visual: false,
+                          history: false,
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition"
+                    >
+                      Plegar todo
+                    </button>
+                  </div>
+                </div>
+
                 {/* Documentación y Vencimientos (4 Documentos Reglamentarios con Alertas 30/15/7 días y Vencidos) */}
-                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('docs')}
+                    className="w-full p-4 flex flex-wrap items-center justify-between gap-2 text-left hover:bg-slate-100/70 transition"
+                  >
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      {openSections.docs ? (
+                        <ChevronDown className="w-4 h-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-500" />
+                      )}
                       <FileText className="w-4 h-4 text-blue-600" />
                       Documentación y Vencimientos (ITV, Seguro, Técnico-Sanitario y Ficha Técnica)
-                    </h3>
-                    <span className="text-[11px] text-slate-500">
-                      Alertas: 30d (Ámbar) • 15d (Naranja) • 7d (Rojo) • Vencido
                     </span>
-                  </div>
+                    <span className="text-[11px] text-slate-500">
+                      Alertas: 30d • 15d • 7d • Vencido
+                    </span>
+                  </button>
 
-                  <div className="space-y-2.5 text-xs">
+                  {openSections.docs && (
+                  <div className="px-4 pb-4 space-y-2.5 text-xs border-t border-slate-200/70 pt-3">
                     {ensureAmbulanceDocuments(selectedAmb).map((doc) => {
                       const diffDays = calculateDaysRemaining(doc.expiryDate);
                       const meta = getExpiryBadgeMeta(diffDays);
@@ -903,21 +969,50 @@ export const FleetView: React.FC<FleetViewProps> = ({
                       );
                     })}
                   </div>
+                  )}
                 </div>
 
                 {/* Dotación a Bordo Obligatoria del Vehículo (Estado OK / Falta) */}
-                <div className="mt-6 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('onboard')}
+                    className="w-full p-4 flex flex-wrap items-center justify-between gap-2 text-left hover:bg-slate-50 transition"
+                  >
                     <div className="flex items-center gap-2">
-                      <PackageCheck className="w-5 h-5 text-blue-600" />
-                      <h3 className="text-sm font-bold text-slate-900">
+                      {openSections.onboard ? (
+                        <ChevronDown className="w-4 h-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-500" />
+                      )}
+                      <PackageCheck className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
                         Dotación a Bordo Obligatoria ({selectedAmb.code}) — Estado OK / Falta
-                      </h3>
+                      </span>
                     </div>
-                    <span className="text-xs text-slate-500">
-                      Equipamiento obligatorio por vehículo y reposición desde almacén
+                    <span
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                        selectedAmb.onboardParts.some(
+                          (p) => p.currentQty < p.requiredQty
+                        )
+                          ? 'bg-rose-100 text-rose-700'
+                          : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {selectedAmb.onboardParts.some(
+                        (p) => p.currentQty < p.requiredQty
+                      )
+                        ? `Faltan ${
+                            selectedAmb.onboardParts.filter(
+                              (p) => p.currentQty < p.requiredQty
+                            ).length
+                          }`
+                        : 'Todo OK'}
                     </span>
-                  </div>
+                  </button>
+
+                  {openSections.onboard && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
 
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
@@ -1173,14 +1268,33 @@ export const FleetView: React.FC<FleetViewProps> = ({
                       Añadir al Vehículo
                     </button>
                   </form>
+                  </div>
+                  )}
                 </div>
 
                 {/* Repuestos en Almacén de Taller compatibles con este modelo */}
-                <div className="mt-6 pt-5 border-t border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 mb-2">
-                    Stock en Almacén de Taller Compatible con {selectedAmb.brand}{' '}
-                    {selectedAmb.model}
-                  </h3>
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('stock')}
+                    className="w-full p-4 flex flex-wrap items-center justify-between gap-2 text-left hover:bg-slate-50 transition"
+                  >
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      {openSections.stock ? (
+                        <ChevronDown className="w-4 h-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-500" />
+                      )}
+                      <Package className="w-4 h-4 text-blue-600" />
+                      Stock en Almacén Compatible ({selectedAmb.brand} {selectedAmb.model})
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {compatibleWorkshopParts.length} referencias
+                    </span>
+                  </button>
+
+                  {openSections.stock && (
+                  <div className="px-4 pb-4 border-t border-slate-100 pt-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {compatibleWorkshopParts.map((sp) => (
                       <div
@@ -1205,11 +1319,34 @@ export const FleetView: React.FC<FleetViewProps> = ({
                       </div>
                     ))}
                   </div>
+                  </div>
+                  )}
                 </div>
 
                 {/* Mapa Visual 360° de Carrocería + Panel Neumáticos y Doble Batería */}
                 {onUpdateBodyAndVisualState && (
-                  <div className="mt-6 pt-5 border-t border-slate-100 space-y-4">
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection('visual')}
+                      className="w-full p-4 flex flex-wrap items-center justify-between gap-2 text-left hover:bg-slate-50 transition"
+                    >
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                        {openSections.visual ? (
+                          <ChevronDown className="w-4 h-4 text-slate-500" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-slate-500" />
+                        )}
+                        <Wrench className="w-4 h-4 text-blue-600" />
+                        Carrocería 360°, Neumáticos y Doble Batería
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        {(selectedAmb.bodyDamages || []).length} daños marcados
+                      </span>
+                    </button>
+
+                    {openSections.visual && (
+                    <div className="px-4 pb-4 space-y-4 border-t border-slate-100 pt-3">
                     <BodyDamageMap
                       damages={selectedAmb.bodyDamages || []}
                       onChange={(updated) =>
@@ -1228,16 +1365,35 @@ export const FleetView: React.FC<FleetViewProps> = ({
                         onUpdateBodyAndVisualState(selectedAmb.id, { batteries })
                       }
                     />
+                    </div>
+                    )}
                   </div>
                 )}
 
                 {/* Historial Integral / Línea Temporal del Vehículo (Incidencias, Órdenes Externas, Preventivos, Documentos y Movimientos de Stock) */}
-                <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('history')}
+                    className="w-full p-4 flex flex-wrap items-center justify-between gap-2 text-left hover:bg-slate-50 transition"
+                  >
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      {openSections.history ? (
+                        <ChevronDown className="w-4 h-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-500" />
+                      )}
                       <History className="w-4 h-4 text-blue-600" />
                       Historial / Línea Temporal de {selectedAmb.code} ({selectedAmb.plate})
-                    </h3>
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {workOrders.filter((w) => w.ambulanceId === selectedAmb.id).length} órdenes • {checklists.filter((c) => c.ambulanceId === selectedAmb.id).length} partes
+                    </span>
+                  </button>
+
+                  {openSections.history && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
 
                     <div className="flex flex-wrap items-center gap-1 text-[11px]">
                       {(
@@ -1445,6 +1601,8 @@ export const FleetView: React.FC<FleetViewProps> = ({
                       </div>
                     );
                   })()}
+                  </div>
+                  )}
                 </div>
                 </div>
               </div>
