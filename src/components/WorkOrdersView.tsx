@@ -234,6 +234,47 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         </div>
       )}
 
+      {/* Embudo visual de estados */}
+      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 min-w-max">
+          {(
+            [
+              { status: 'Reportada', cls: 'bg-slate-100 text-slate-800 border-slate-300' },
+              { status: 'Asignada', cls: 'bg-blue-50 text-blue-800 border-blue-200' },
+              { status: 'En taller', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+              { status: 'Reparada', cls: 'bg-teal-50 text-teal-800 border-teal-200' },
+              { status: 'Cerrada', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+            ] as const
+          ).map((step, idx, arr) => {
+            const count = workOrders.filter((w) => w.status === step.status).length;
+            const active = filterStatus === step.status;
+            return (
+              <React.Fragment key={step.status}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilterStatus(active ? 'Todas' : step.status)
+                  }
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                    active
+                      ? 'ring-2 ring-blue-500 shadow-sm ' + step.cls
+                      : step.cls + ' opacity-90 hover:opacity-100'
+                  }`}
+                >
+                  <span>{step.status}</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-white/80 text-[11px] font-black">
+                    {count}
+                  </span>
+                </button>
+                {idx < arr.length - 1 && (
+                  <span className="text-slate-300 font-black text-xs">→</span>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Layout Maestro-Detalle de Órdenes de Reparación Externas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Lista de Órdenes */}
@@ -303,7 +344,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   </p>
 
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-                    <span className="flex items-center gap-1 font-semibold text-amber-800">
+                    <span
+                      className={`inline-flex items-center gap-1 font-extrabold px-2 py-0.5 rounded-full border ${
+                        downtimeDays >= 10 && wo.status !== 'Cerrada'
+                          ? 'bg-rose-50 text-rose-800 border-rose-200'
+                          : downtimeDays >= 4 && wo.status !== 'Cerrada'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-slate-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
                       <Clock className="w-3.5 h-3.5" />
                       {downtimeDays} {downtimeDays === 1 ? 'día' : 'días'} parado
                     </span>

@@ -61,6 +61,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
   >('warehouse');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
+  const [onlyMissingOnboard, setOnlyMissingOnboard] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
@@ -100,7 +101,14 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
       p.compatibleModels.some((m) =>
         m.toLowerCase().includes(searchQuery.toLowerCase())
       );
-    return matchesCategory && matchesQuery;
+    const matchesMissing =
+      !onlyMissingOnboard ||
+      ambulances.some((amb) =>
+        amb.onboardParts.some(
+          (op) => op.partId === p.id && op.currentQty < op.requiredQty
+        )
+      );
+    return matchesCategory && matchesQuery && matchesMissing;
   });
 
   const totalUnitsInStock = spareParts.reduce(
@@ -385,6 +393,17 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                   {cat}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setOnlyMissingOnboard((v) => !v)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
+                  onlyMissingOnboard
+                    ? 'bg-rose-600 text-white border-rose-600'
+                    : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                }`}
+              >
+                Falta en ambulancias
+              </button>
             </div>
           </div>
 
@@ -458,9 +477,26 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
                             {isLow && <AlertTriangle className="w-3.5 h-3.5" />}
                             {part.stockQuantity} uds.
                           </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                          <span className="block text-[10px] text-slate-500 mt-0.5">
                             Stock mín: {part.minStockAlert}
                           </span>
+                          <div className="w-20 h-1.5 rounded-full bg-slate-200 overflow-hidden mx-auto mt-1">
+                            <div
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.round(
+                                    (part.stockQuantity /
+                                      Math.max(1, part.minStockAlert * 2)) *
+                                      100
+                                  )
+                                )}%`,
+                              }}
+                              className={`h-full ${
+                                isLow ? 'bg-rose-600' : 'bg-emerald-600'
+                              }`}
+                            />
+                          </div>
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="inline-flex items-center gap-1">

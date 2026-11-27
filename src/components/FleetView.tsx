@@ -454,32 +454,54 @@ export const FleetView: React.FC<FleetViewProps> = ({
                 const missingOnboard = amb.onboardParts.some(
                   (p) => p.currentQty < p.requiredQty
                 );
+                const thumbPhoto =
+                  amb.documents?.find((d) =>
+                    d.fileDataUrl?.startsWith('data:image/')
+                  )?.fileDataUrl ||
+                  workOrders.find(
+                    (w) => w.ambulanceId === amb.id && w.photos?.[0]
+                  )?.photos?.[0];
+                const statusBorder =
+                  amb.status === 'Disponible'
+                    ? 'border-l-4 border-l-emerald-500'
+                    : amb.status === 'En taller'
+                    ? 'border-l-4 border-l-amber-500'
+                    : 'border-l-4 border-l-rose-600';
                 return (
                   <div
                     key={amb.id}
                     onClick={() => setSelectedAmbId(amb.id)}
-                    className={`p-4 rounded-xl border transition cursor-pointer ${
+                    className={`p-4 rounded-xl border transition cursor-pointer ${statusBorder} ${
                       isSelected
                         ? 'bg-blue-50/50 border-blue-500 ring-2 ring-blue-500/20 shadow-sm'
                         : 'bg-white border-slate-200 hover:border-slate-300'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-extrabold text-slate-900">
-                            {amb.code}
-                          </span>
-                          <span className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-700">
-                            {amb.plate}
-                          </span>
-                          <span className="text-xs text-slate-500 font-medium">
-                            {amb.type}
-                          </span>
+                      <div className="flex items-start gap-3 min-w-0">
+                        {thumbPhoto && (
+                          <img
+                            src={thumbPhoto}
+                            alt={amb.code}
+                            className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-extrabold text-slate-900">
+                              {amb.code}
+                            </span>
+                            <span className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-700">
+                              {amb.plate}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">
+                              {amb.type}
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-bold text-slate-800 mt-1 truncate">
+                            {amb.brand} {amb.model} ({amb.year})
+                          </h3>
                         </div>
-                        <h3 className="text-sm font-bold text-slate-800 mt-1">
-                          {amb.brand} {amb.model} ({amb.year})
-                        </h3>
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -654,6 +676,54 @@ export const FleetView: React.FC<FleetViewProps> = ({
                   </div>
                 </div>
 
+                {/* Barra de progreso hacia próximo mantenimiento preventivo */}
+                {(() => {
+                  const nextKmSched = preventiveSchedules
+                    .filter((s) => s.ambulanceId === selectedAmb.id && s.nextDueKm)
+                    .sort((a, b) => (a.nextDueKm || 0) - (b.nextDueKm || 0))[0];
+                  if (!nextKmSched || !nextKmSched.nextDueKm) return null;
+                  const targetKm = nextKmSched.nextDueKm;
+                  const baseKm = nextKmSched.lastDoneKm ?? selectedAmb.lastServiceMileage ?? 0;
+                  const span = Math.max(1000, targetKm - baseKm);
+                  const progressed = Math.max(0, selectedAmb.mileage - baseKm);
+                  const pct = Math.min(100, Math.round((progressed / span) * 100));
+                  const remainingKm = targetKm - selectedAmb.mileage;
+                  return (
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-700">
+                          Progreso Preventivo: {nextKmSched.title}
+                        </span>
+                        <span
+                          className={`font-extrabold ${
+                            remainingKm <= 0
+                              ? 'text-rose-700'
+                              : remainingKm <= 1500
+                              ? 'text-amber-700'
+                              : 'text-emerald-700'
+                          }`}
+                        >
+                          {remainingKm <= 0
+                            ? `Excedido ${Math.abs(remainingKm).toLocaleString()} km`
+                            : `Faltan ${remainingKm.toLocaleString()} km (a los ${targetKm.toLocaleString()} km)`}
+                        </span>
+                      </div>
+                      <div className="w-full h-2.5 rounded-full bg-slate-200 overflow-hidden">
+                        <div
+                          style={{ width: `${pct}%` }}
+                          className={`h-full transition-all ${
+                            remainingKm <= 0
+                              ? 'bg-rose-600'
+                              : remainingKm <= 1500
+                              ? 'bg-amber-500'
+                              : 'bg-emerald-600'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Documentación y Vencimientos (4 Documentos Reglamentarios con Alertas 30/15/7 días y Vencidos) */}
                 <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -730,9 +800,24 @@ export const FleetView: React.FC<FleetViewProps> = ({
                                 {doc.type}
                               </span>
                               <span
-                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${meta.badgeClass}`}
+                                className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${meta.badgeClass}`}
                               >
-                                {meta.label}
+                                {(() => {
+                                  const dObj = doc.expiryDate
+                                    ? new Date(`${doc.expiryDate}T12:00:00`)
+                                    : null;
+                                  const shortDate =
+                                    dObj && !Number.isNaN(dObj.getTime())
+                                      ? dObj.toLocaleDateString('es-ES', {
+                                          day: 'numeric',
+                                          month: 'short',
+                                        })
+                                      : '';
+                                  if (diffDays < 0) {
+                                    return `${shortDate ? `${shortDate} · ` : ''}Vencido (${Math.abs(diffDays)}d)`;
+                                  }
+                                  return `${shortDate ? `${shortDate} · ` : ''}${diffDays} días`;
+                                })()}
                               </span>
                             </div>
 

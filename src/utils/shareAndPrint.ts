@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import {
   Ambulance,
   ExternalWorkshop,
@@ -25,6 +26,22 @@ const getReportLogoHtml = (): string => {
   return `<img src="${escapeHtml(
     logoUrl
   )}" alt="Logo UTE Acciona ICOT" style="height:40px;width:auto;object-fit:contain;margin-bottom:8px;display:block;" />`;
+};
+
+const getUnitQrHtml = async (amb?: Ambulance): Promise<string> => {
+  if (!amb?.plate || typeof window === 'undefined') return '';
+  try {
+    const unitUrl = `${window.location.origin}${window.location.pathname}?unidad=${encodeURIComponent(
+      amb.plate
+    )}`;
+    const qrDataUrl = await QRCode.toDataURL(unitUrl, { width: 120, margin: 1 });
+    return `<div style="text-align:center;margin-left:12px;">
+      <img src="${qrDataUrl}" alt="QR ${escapeHtml(amb.plate)}" style="width:62px;height:62px;border:1px solid #cbd5e1;border-radius:6px;padding:2px;background:#fff;" />
+      <div style="font-size:9px;color:#64748b;margin-top:2px;">Ficha ${escapeHtml(amb.code)}</div>
+    </div>`;
+  } catch {
+    return '';
+  }
 };
 
 export const shareChecklistViaWhatsApp = (
@@ -115,9 +132,13 @@ export const shareWorkOrderViaWhatsApp = (
   );
 };
 
-export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
+export const printChecklistReport = async (
+  chk: FleetChecklist,
+  amb?: Ambulance
+) => {
   const win = window.open('', '_blank');
   if (!win) return;
+  const qrHtml = await getUnitQrHtml(amb);
 
   const rowsHtml = chk.items
     .map(
@@ -166,7 +187,7 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
             ${safePhotos
               .map(
                 (p) =>
-                  `<img src="${p}" style="width:160px;height:115px;object-fit:cover;border:1px solid #94a3b8;border-radius:6px;" />`
+                  `<img src="${p}" style="width:200px;height:140px;object-fit:cover;border:1px solid #94a3b8;border-radius:6px;" />`
               )
               .join('')}
           </div>
@@ -182,7 +203,7 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
             chk.inspectorName
           )}</p>
         </div>
-        <img src="${chk.inspectorSignature}" style="height:65px;border:1px solid #cbd5e1;padding:4px;border-radius:6px;" />
+        <img src="${chk.inspectorSignature}" style="height:82px;border:1px solid #cbd5e1;padding:4px;border-radius:6px;" />
       </div>`
       : '';
 
@@ -256,13 +277,14 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
   win.document.close();
 };
 
-export const printWorkOrderReport = (
+export const printWorkOrderReport = async (
   wo: WorkOrder,
   amb?: Ambulance,
   ws?: ExternalWorkshop
 ) => {
   const win = window.open('', '_blank');
   if (!win) return;
+  const qrHtml = await getUnitQrHtml(amb);
 
   const partsHtml =
     wo.partsUsed.length > 0
@@ -295,7 +317,7 @@ export const printWorkOrderReport = (
             ${safePhotos
               .map(
                 (p) =>
-                  `<img src="${p}" style="width:160px;height:115px;object-fit:cover;border:1px solid #94a3b8;border-radius:6px;" />`
+                  `<img src="${p}" style="width:200px;height:140px;object-fit:cover;border:1px solid #94a3b8;border-radius:6px;" />`
               )
               .join('')}
           </div>
@@ -340,12 +362,15 @@ export const printWorkOrderReport = (
           )}</h1>
           <p style="font-size:12px;color:#475569;margin:4px 0 0;">Ambu-lzflota • Gestión de Flota de Ambulancias</p>
         </div>
-        <div style="text-align:right;font-size:12px;">
-          <strong>Estado:</strong> ${escapeHtml(wo.status)}<br/>
-          <strong>Prioridad:</strong> ${escapeHtml(wo.priority)}<br/>
-          <strong>Entrada:</strong> ${escapeHtml(
-            wo.entryDate || wo.createdAt
-          )} ${wo.exitDate ? `| <strong>Salida:</strong> ${escapeHtml(wo.exitDate)}` : ''}
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <div style="text-align:right;font-size:12px;">
+            <strong>Estado:</strong> ${escapeHtml(wo.status)}<br/>
+            <strong>Prioridad:</strong> ${escapeHtml(wo.priority)}<br/>
+            <strong>Entrada:</strong> ${escapeHtml(
+              wo.entryDate || wo.createdAt
+            )} ${wo.exitDate ? `| <strong>Salida:</strong> ${escapeHtml(wo.exitDate)}` : ''}
+          </div>
+          ${qrHtml}
         </div>
       </div>
 
@@ -428,13 +453,14 @@ export const printWorkOrderReport = (
   win.document.close();
 };
 
-export const printPartsDeliveryNote = (
+export const printPartsDeliveryNote = async (
   wo: WorkOrder,
   amb?: Ambulance,
   ws?: ExternalWorkshop
 ) => {
   const win = window.open('', '_blank', 'width=800,height=900');
   if (!win) return;
+  const qrHtml = await getUnitQrHtml(amb);
 
   const safeSig =
     wo.partsDeliverySignature && wo.partsDeliverySignature.startsWith('data:image/')
@@ -483,11 +509,14 @@ export const printPartsDeliveryNote = (
           <h1 style="margin:0;font-size:20px;">ALBARÁN DE ENTREGA DE REPUESTOS PROPIOS</h1>
           <p style="margin:4px 0 0;font-size:12px;color:#475569;">Ambu-lzflota Gestión de Flota (Material de almacén propio sin cargo económico)</p>
         </div>
-        <div style="text-align:right;">
-          <div style="font-size:16px;font-weight:900;color:#e11d48;">${escapeHtml(wo.code)}</div>
-          <div style="font-size:11px;color:#64748b;">Fecha entrega: ${escapeHtml(
-            wo.partsDeliveryDate || getLocalDateString()
-          )}</div>
+        <div style="display:flex;align-items:flex-end;gap:10px;">
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;color:#e11d48;">${escapeHtml(wo.code)}</div>
+            <div style="font-size:11px;color:#64748b;">Fecha entrega: ${escapeHtml(
+              wo.partsDeliveryDate || getLocalDateString()
+            )}</div>
+          </div>
+          ${qrHtml}
         </div>
       </div>
 

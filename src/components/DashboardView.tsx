@@ -42,6 +42,7 @@ interface DashboardViewProps {
   onNavigate: (
     tab:
       | 'dashboard'
+      | 'pizarra'
       | 'fleet'
       | 'preventive'
       | 'checklist'
@@ -156,6 +157,160 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Semáforo de Disponibilidad + Atención Hoy */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+              Semáforo de Flota ({ambulances.length} uds.)
+            </h3>
+            <span className="text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              {ambulances.length > 0
+                ? Math.round((availableCount / ambulances.length) * 100)
+                : 0}
+              % Operativa
+            </span>
+          </div>
+          <div className="w-full h-3.5 rounded-full bg-slate-100 overflow-hidden flex border border-slate-200">
+            {availableCount > 0 && (
+              <div
+                style={{
+                  width: `${(availableCount / Math.max(1, ambulances.length)) * 100}%`,
+                }}
+                className="bg-emerald-600 h-full transition-all"
+                title={`Disponibles: ${availableCount}`}
+              />
+            )}
+            {workshopCount > 0 && (
+              <div
+                style={{
+                  width: `${(workshopCount / Math.max(1, ambulances.length)) * 100}%`,
+                }}
+                className="bg-amber-500 h-full transition-all"
+                title={`En taller: ${workshopCount}`}
+              />
+            )}
+            {outOfServiceCount > 0 && (
+              <div
+                style={{
+                  width: `${(outOfServiceCount / Math.max(1, ambulances.length)) * 100}%`,
+                }}
+                className="bg-rose-600 h-full transition-all"
+                title={`Fuera de servicio: ${outOfServiceCount}`}
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
+            <span className="flex items-center gap-1.5 text-emerald-800">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+              {availableCount} Disponibles
+            </span>
+            <span className="flex items-center gap-1.5 text-amber-800">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              {workshopCount} En taller
+            </span>
+            <span className="flex items-center gap-1.5 text-rose-800">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
+              {outOfServiceCount} Fuera serv.
+            </span>
+          </div>
+        </div>
+
+        <div className="lg:col-span-7 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2.5">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+              Atención Hoy (Prioridades)
+            </h3>
+            <button
+              type="button"
+              onClick={() => onNavigate('pizarra')}
+              className="text-xs font-bold text-blue-700 hover:underline"
+            >
+              Ver Pizarra →
+            </button>
+          </div>
+          {(() => {
+            const topItems: Array<{
+              id: string;
+              badge: string;
+              badgeClass: string;
+              text: string;
+              tab: 'fleet' | 'workorders' | 'parts' | 'preventive';
+            }> = [];
+
+            documentAlerts
+              .filter((d) => d.level !== 'ok')
+              .slice(0, 2)
+              .forEach((d) => {
+              topItems.push({
+                id: `doc-${d.ambulanceId}-${d.document.id}`,
+                badge: d.daysRemaining < 0 ? 'VENCIDO' : `${d.daysRemaining}d`,
+                badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+                text: `${d.ambulanceCode} (${d.ambulancePlate}) • ${d.document.type}`,
+                tab: 'fleet',
+              });
+            });
+
+            openWorkOrders
+              .filter(
+                (w) => w.priority === 'Crítica (Urgente)' || w.priority === 'Alta'
+              )
+              .slice(0, 2)
+              .forEach((w) => {
+                const amb = ambulances.find((a) => a.id === w.ambulanceId);
+                topItems.push({
+                  id: `wo-${w.id}`,
+                  badge: w.status,
+                  badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+                  text: `${amb?.code || w.code}: ${w.title}`,
+                  tab: 'workorders',
+                });
+              });
+
+            if (lowStockParts.length > 0 && topItems.length < 4) {
+              topItems.push({
+                id: 'stock-low',
+                badge: `${lowStockParts.length} refs`,
+                badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+                text: `Repuestos bajo stock mínimo en almacén`,
+                tab: 'parts',
+              });
+            }
+
+            if (topItems.length === 0) {
+              return (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  Flota al día: sin documentos vencidos ni averías urgentes pendientes hoy.
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-1.5">
+                {topItems.slice(0, 4).map((it) => (
+                  <button
+                    key={it.id}
+                    type="button"
+                    onClick={() => onNavigate(it.tab)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-50 hover:bg-blue-50/60 border border-slate-200 flex items-center justify-between gap-2 text-left transition"
+                  >
+                    <span className="text-xs font-semibold text-slate-800 truncate">
+                      {it.text}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border shrink-0 ${it.badgeClass}`}
+                    >
+                      {it.badge}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div

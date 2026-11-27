@@ -98,7 +98,14 @@ import {
   verifyManagerPin,
   updateManagerPin,
 } from './utils/security';
-import { checkAndNotifyCriticalExpiries } from './utils/notifications';
+import {
+  checkAndNotifyCriticalExpiries,
+  showLocalNotification,
+} from './utils/notifications';
+import {
+  playIncomingUnitAlarm,
+  vibrateMobileAlarm,
+} from './utils/alarmAudio';
 import { ensureAmbulanceDocuments } from './utils/expiryAlerts';
 import {
   backupFleetJsonToGoogleDrive,
@@ -146,6 +153,8 @@ import {
   Type,
   HelpCircle,
   ShieldCheck,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 const AiAssistantModal = lazy(() =>
   import('./components/AiAssistantModal').then((m) => ({
@@ -296,6 +305,19 @@ export function App() {
   const [largeText, setLargeText] = useState<boolean>(() =>
     safeLoadFromStorage<boolean>(`${STORAGE_KEY}_largeText`, false)
   );
+  const [alarmSoundEnabled, setAlarmSoundEnabled] = useState<boolean>(() =>
+    safeLoadFromStorage<boolean>(`${STORAGE_KEY}_alarm_sound`, true)
+  );
+  const [incomingUnitAlert, setIncomingUnitAlert] = useState<{
+    plate: string;
+    code: string;
+    urgency: string;
+    description: string;
+    reporterName: string;
+    ambulanceId?: string;
+    count: number;
+  } | null>(null);
+  const seenUnitReportIdsRef = useRef<Set<string>>(new Set());
   const [driveWebhookUrl, setDriveWebhookUrl] = useState<string>(() =>
     getDriveWebhookUrl()
   );
@@ -403,6 +425,17 @@ export function App() {
       safeSaveToStorage(`${STORAGE_KEY}_largeText`, largeText);
     }
   }, [largeText]);
+
+  const handleToggleAlarmSound = () => {
+    setAlarmSoundEnabled((prev) => {
+      const next = !prev;
+      safeSaveToStorage(`${STORAGE_KEY}_alarm_sound`, next);
+      if (next) {
+        playIncomingUnitAlarm(false);
+      }
+      return next;
+    });
+  };
 
   // Detector de estado Online / Offline (PWA)
   useEffect(() => {
@@ -529,6 +562,41 @@ export function App() {
 
     const unsubReports = subscribePendingUnitReports(
       (reports: UnitBreakdownReport[]) => {
+        const freshReports = reports.filter(
+          (r) => !seenUnitReportIdsRef.current.has(r.id)
+        );
+        if (freshReports.length > 0) {
+          freshReports.forEach((r) => seenUnitReportIdsRef.current.add(r.id));
+          const first = freshReports[0];
+          const isUrgent =
+            first.urgency === 'Inmovilización Inmediata' ||
+            first.urgency === 'Prioritaria';
+          if (alarmSoundEnabled) {
+            playIncomingUnitAlarm(isUrgent);
+          }
+          vibrateMobileAlarm(isUrgent);
+          const matchedForAlert =
+            ambulances.find((a) => a.id === first.ambulanceId) ||
+            ambulances.find(
+              (a) =>
+                a.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() ===
+                first.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+            );
+          setIncomingUnitAlert({
+            plate: first.plate,
+            code: matchedForAlert?.code || first.ambulanceCode || 'Unidad',
+            urgency: first.urgency,
+            description: first.description,
+            reporterName: first.reporterName,
+            ambulanceId: matchedForAlert?.id,
+            count: freshReports.length,
+          });
+          void showLocalNotification(
+            `🚨 Nuevo parte de ${matchedForAlert?.code || first.plate} (${first.urgency})`,
+            `${first.reporterName}: ${first.description}`,
+            `unit-report-${first.id}`
+          );
+        }
         setChecklists((prev) => {
           const existingIds = new Set(prev.map((c) => c.id));
           const incoming: FleetChecklist[] = [];
@@ -2624,6 +2692,26 @@ export function App() {
             })()}
             <button
               type="button"
+              onClick={handleToggleAlarmSound}
+              title={
+                alarmSoundEnabled
+                  ? 'Alarma sonora activa (pulsa para silenciar)'
+                  : 'Alarma silenciada (pulsa para activar y probar)'
+              }
+              className={`hidden md:flex p-2 rounded-xl text-xs font-semibold border transition ${
+                alarmSoundEnabled
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              {alarmSoundEnabled ? (
+                <Volume2 className="w-3.5 h-3.5" />
+              ) : (
+                <VolumeX className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => setDarkMode((v) => !v)}
               title={darkMode ? 'Desactivar modo oscuro' : 'Activar modo oscuro nocturno'}
               className={`hidden md:flex p-2 rounded-xl text-xs font-semibold border transition ${
@@ -2780,6 +2868,20 @@ export function App() {
           })()}
           <button
             type="button"
+            onClick={handleToggleAlarmSound}
+            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold shrink-0 ${
+              alarmSoundEnabled ? 'text-emerald-400' : 'text-slate-400'
+            }`}
+          >
+            {alarmSoundEnabled ? (
+              <Volume2 className="w-4 h-4" />
+            ) : (
+              <VolumeX className="w-4 h-4" />
+            )}
+            <span>{alarmSoundEnabled ? 'Alarma' : 'Mudo'}</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setDarkMode((v) => !v)}
             className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold shrink-0 ${
               darkMode ? 'text-amber-300' : 'text-slate-300 hover:text-white'
@@ -2829,6 +2931,50 @@ export function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 pb-24 sm:py-6 lg:pb-8 flex-1 space-y-4 overflow-x-hidden">
+        {incomingUnitAlert && (
+          <div className="p-4 rounded-2xl bg-rose-600 text-white shadow-xl border-2 border-rose-300 flex flex-wrap items-center justify-between gap-3 animate-pulse">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <Bell className="w-5 h-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-wider text-rose-100">
+                  🚨 Alarma de Parte Recibido ({incomingUnitAlert.count}) •{' '}
+                  {incomingUnitAlert.urgency}
+                </p>
+                <p className="text-sm font-extrabold truncate">
+                  {incomingUnitAlert.code} ({incomingUnitAlert.plate}) —{' '}
+                  {incomingUnitAlert.reporterName}
+                </p>
+                <p className="text-xs text-rose-100 truncate">
+                  {incomingUnitAlert.description}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (incomingUnitAlert.ambulanceId) {
+                    setQrSelectedAmbId(incomingUnitAlert.ambulanceId);
+                  }
+                  setActiveTab('pizarra');
+                  setIncomingUnitAlert(null);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-white text-rose-700 font-black text-xs hover:bg-rose-50 shadow-sm"
+              >
+                Ver en Pizarra
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncomingUnitAlert(null)}
+                className="px-3 py-2 rounded-xl bg-rose-800/80 hover:bg-rose-900 text-white font-bold text-xs border border-rose-400/50"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        )}
         {/* Aviso automático de límite de almacenamiento local */}
         {(storageStats.isWarning || quotaAlert) && (
           <div
@@ -2862,8 +3008,19 @@ export function App() {
 
         <Suspense
           fallback={
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs font-bold text-slate-500">
-              Cargando módulo...
+            <div className="space-y-4 animate-pulse">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[1, 2, 3, 4].map((n) => (
+                  <div
+                    key={n}
+                    className="h-24 rounded-2xl bg-white border border-slate-200 p-4 space-y-2"
+                  >
+                    <div className="h-3 w-24 bg-slate-200 rounded" />
+                    <div className="h-6 w-16 bg-slate-200 rounded" />
+                  </div>
+                ))}
+              </div>
+              <div className="h-56 rounded-2xl bg-white border border-slate-200" />
             </div>
           }
         >
