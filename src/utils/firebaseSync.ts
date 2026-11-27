@@ -397,18 +397,27 @@ export const submitUnitBreakdownReport = async (
   try {
     const { db } = getFirebaseServices(projectId, apiKey);
     await ensureFirebaseAuthSession(projectId, apiKey);
-    await setDoc(doc(db, 'ambufleet_unit_reports', report.id), {
-      ...report,
-      status: 'pending',
-    });
+    const sanitized = Object.fromEntries(
+      Object.entries({ ...report, status: 'pending' }).filter(
+        ([, v]) => v !== undefined
+      )
+    );
+    await setDoc(doc(db, 'ambufleet_unit_reports', report.id), sanitized);
     return { ok: true };
   } catch (err) {
+    const rawMsg =
+      err instanceof Error
+        ? err.message
+        : 'No se pudo enviar el parte a Firebase.';
+    const friendly =
+      rawMsg.includes('permission') || rawMsg.includes('PERMISSION_DENIED')
+        ? 'Permiso denegado en Firestore. Verifica las reglas de ambufleet_unit_reports en Firebase Console.'
+        : rawMsg.includes('exceeds') || rawMsg.includes('too large')
+        ? 'Las fotos pesan demasiado para un único envío. Prueba con menos fotos.'
+        : rawMsg;
     return {
       ok: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : 'No se pudo enviar el parte a Firebase.',
+      error: friendly,
     };
   }
 };
@@ -479,4 +488,67 @@ export const fetchLastUnitReportByPlate = async (
   } catch {
     return null;
   }
+};
+
+export interface ClosedReportFirestoreRecord {
+  id: string;
+  checklistId: string;
+  ambulanceId: string;
+  ambulanceCode: string;
+  plate: string;
+  reportDate: string;
+  closedAt: string;
+  closedAtIso: string;
+  reporterName: string;
+  closedBy: string;
+  mileage: number;
+  urgency: string;
+  summary: string;
+  anomalies: string[];
+  resolution: string;
+  closureType: 'Cierre Directo' | 'Orden de Taller';
+  linkedWorkOrderCode?: string;
+  workshopName?: string;
+}
+
+export const saveClosedReportToFirebase = async (
+  record: ClosedReportFirestoreRecord,
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): Promise<{ ok: boolean; error?: string }> => {
+  try {
+    const { db } = getFirebaseServices(projectId, apiKey);
+    await ensureFirebaseAuthSession(projectId, apiKey);
+    await setDoc(doc(db, 'ambufleet_closed_reports', record.id), record);
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : 'No se pudo guardar el parte cerrado en Firestore.',
+    };
+  }
+};
+
+export const subscribeClosedReports = (
+  onReports: (reports: ClosedReportFirestoreRecord[]) => void,
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): (() => void) => {
+  const { db } = getFirebaseServices(projectId, apiKey);
+  const colRef = collection(db, 'ambufleet_closed_reports');
+
+  return onSnapshot(colRef, (snapshot) => {
+    const list: ClosedReportFirestoreRecord[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as ClosedReportFirestoreRecord;
+      if (data && data.id) {
+        list.push(data);
+      }
+    });
+    list.sort((a, b) => (b.closedAtIso > a.closedAtIso ? 1 : -1));
+    onReports(list);
+  });
 };

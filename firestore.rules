@@ -14,5 +14,8 @@ service cloud.firestore {
                     && request.resource.data.description is string;
       allow read, update: if request.auth != null;
     }
+    match /ambufleet_closed_reports/{reportId} {
+      allow read, write: if true;
+    }
   }
 }

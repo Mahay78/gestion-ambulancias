@@ -163,10 +163,38 @@ export interface FleetChecklist {
   items: ChecklistItem[];
   missingParts: MissingVehiclePartReport[];
   generalObservations: string;
-  workshopStatus: 'Pendiente de Asignar Taller' | 'Orden Externa Creada' | 'Archivada / OK';
+  workshopStatus:
+    | 'Pendiente de Asignar Taller'
+    | 'Orden Externa Creada'
+    | 'Archivada / OK'
+    | 'Cerrada / Resuelta';
   linkedWorkOrderId?: string;
   photos?: string[];
   inspectorSignature?: string;
+  closedAt?: string;
+  closedBy?: string;
+  closingResolution?: string;
+}
+
+export interface ClosedReportRecord {
+  id: string;
+  checklistId: string;
+  ambulanceId: string;
+  ambulanceCode: string;
+  plate: string;
+  reportDate: string;
+  closedAt: string;
+  closedAtIso: string;
+  reporterName: string;
+  closedBy: string;
+  mileage: number;
+  urgency: FleetChecklist['overallUrgency'];
+  summary: string;
+  anomalies: string[];
+  resolution: string;
+  closureType: 'Cierre Directo' | 'Orden de Taller';
+  linkedWorkOrderCode?: string;
+  workshopName?: string;
 }
 
 export type WorkshopSpecialty =

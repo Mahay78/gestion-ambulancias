@@ -131,7 +131,7 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
     try {
       const nextPhotos: string[] = [];
       for (let i = 0; i < Math.min(files.length, 4 - photos.length); i++) {
-        const compressed = await compressImageFile(files[i], 900, 0.72);
+        const compressed = await compressImageFile(files[i], 680, 0.6);
         nextPhotos.push(compressed);
       }
       setPhotos((prev) => [...prev, ...nextPhotos].slice(0, 4));
@@ -163,16 +163,22 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
       return;
     }
 
+    const normInput = normalizePlate(cleanPlate);
+    const matchedEntry =
+      selectedPlateEntry ||
+      platesList.find((p) => normalizePlate(p.plate) === normInput) ||
+      null;
+
     const parsedKm = parseInt(mileage, 10);
     const finalKm = !isNaN(parsedKm) && parsedKm >= 0
       ? parsedKm
-      : selectedPlateEntry?.mileage || 0;
+      : matchedEntry?.mileage || 0;
 
     const report: UnitBreakdownReport = {
       id: `unit-rep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      ambulanceId: selectedPlateEntry?.id,
-      ambulanceCode: selectedPlateEntry?.code,
-      plate: selectedPlateEntry?.plate || cleanPlate,
+      ...(matchedEntry?.id ? { ambulanceId: matchedEntry.id } : {}),
+      ...(matchedEntry?.code ? { ambulanceCode: matchedEntry.code } : {}),
+      plate: matchedEntry?.plate || cleanPlate,
       reporterName: reporterName.trim(),
       mileage: finalKm,
       reportType,
@@ -190,8 +196,8 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
 
     if (res.ok) {
       if (photos.length > 0) {
-        const unitFolder = selectedPlateEntry
-          ? `${selectedPlateEntry.code} (${selectedPlateEntry.plate})`
+        const unitFolder = matchedEntry
+          ? `${matchedEntry.code} (${matchedEntry.plate})`
           : cleanPlate;
         photos.forEach((p, idx) => {
           uploadDataUrlToUnitFolder(

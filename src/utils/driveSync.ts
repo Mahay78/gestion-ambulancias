@@ -251,3 +251,50 @@ export const openGoogleDriveFolder = async (): Promise<void> => {
     // ignorar
   }
 };
+
+export const appendClosedReportToGoogleSheet = async (record: {
+  id: string;
+  closedAt: string;
+  reportDate: string;
+  ambulanceCode: string;
+  plate: string;
+  mileage: number;
+  urgency: string;
+  reporterName: string;
+  closedBy: string;
+  closureType: string;
+  linkedWorkOrderCode?: string;
+  workshopName?: string;
+  summary: string;
+  anomalies: string[];
+  resolution: string;
+}): Promise<{ ok: boolean; sheetUrl?: string; error?: string }> => {
+  const webhookUrl = getDriveWebhookUrl();
+  if (!webhookUrl) {
+    return { ok: false, error: 'Webhook de Google Drive no configurado.' };
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'append_closed_report',
+        record,
+      }),
+    });
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status} al registrar en Google Sheets.` };
+    }
+    const data = (await res.json()) as {
+      ok?: boolean;
+      sheetUrl?: string;
+      error?: string;
+    };
+    return { ok: Boolean(data.ok), sheetUrl: data.sheetUrl, error: data.error };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Error de red con Google Sheets.',
+    };
+  }
+};

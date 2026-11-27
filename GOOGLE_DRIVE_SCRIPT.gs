@@ -59,6 +59,69 @@ function doPost(e) {
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 2b. Registrar parte cerrado en Google Sheets (Base_Datos_Partes_Cerrados)
+    if (payload.action === 'append_closed_report' && payload.record) {
+      var sheetFileName = 'Base_Datos_Partes_Cerrados';
+      var files = rootFolder.getFilesByName(sheetFileName);
+      var ss;
+      if (files.hasNext()) {
+        ss = SpreadsheetApp.open(files.next());
+      } else {
+        ss = SpreadsheetApp.create(sheetFileName);
+        var createdFile = DriveApp.getFileById(ss.getId());
+        rootFolder.addFile(createdFile);
+        DriveApp.getRootFolder().removeFile(createdFile);
+        var initSheet = ss.getSheets()[0];
+        initSheet.setName('Partes Cerrados');
+        initSheet.appendRow([
+          'ID',
+          'Fecha Cierre',
+          'Fecha Parte',
+          'Unidad',
+          'Matrícula',
+          'Km',
+          'Urgencia',
+          'Reportado por',
+          'Cerrado por',
+          'Tipo Cierre',
+          'Orden Taller',
+          'Taller',
+          'Resumen / Avería',
+          'Anomalías',
+          'Resolución',
+        ]);
+        initSheet.getRange(1, 1, 1, 15).setFontWeight('bold');
+      }
+
+      var r = payload.record;
+      var sheet = ss.getSheetByName('Partes Cerrados') || ss.getSheets()[0];
+      sheet.appendRow([
+        r.id || '',
+        r.closedAt || '',
+        r.reportDate || '',
+        r.ambulanceCode || '',
+        r.plate || '',
+        r.mileage || 0,
+        r.urgency || '',
+        r.reporterName || '',
+        r.closedBy || '',
+        r.closureType || '',
+        r.linkedWorkOrderCode || '',
+        r.workshopName || '',
+        r.summary || '',
+        Array.isArray(r.anomalies) ? r.anomalies.join(' | ') : '',
+        r.resolution || '',
+      ]);
+
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          ok: true,
+          sheetUrl: ss.getUrl(),
+          rootFolderUrl: rootFolder.getUrl(),
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
     // 3. Subida de archivos/fotos/backups organizados por subcarpeta
     var targetFolder = rootFolder;
     if (payload.subfolder) {

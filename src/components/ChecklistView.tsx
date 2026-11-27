@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Ambulance,
   ChecklistItem,
   ChecklistItemStatus,
+  ClosedReportRecord,
   ExternalWorkshop,
   FleetChecklist,
   MissingVehiclePartReport,
@@ -34,6 +35,10 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Printer,
+  Database,
+  Download,
+  Search,
+  Lock,
 } from 'lucide-react';
 
 interface ChecklistViewProps {
@@ -41,12 +46,18 @@ interface ChecklistViewProps {
   checklists: FleetChecklist[];
   workOrders?: WorkOrder[];
   workshops?: ExternalWorkshop[];
+  closedReports?: ClosedReportRecord[];
   onSubmitChecklist: (
     checklist: Omit<FleetChecklist, 'id'>,
     autoCreateWorkOrder: boolean,
     updatedOnboardQtys: Record<string, number>
   ) => void;
   onCreateWorkOrderFromChecklist: (checklist: FleetChecklist) => void;
+  onCloseChecklistReport?: (
+    checklistId: string,
+    resolution: string,
+    markAmbulanceAvailable: boolean
+  ) => void;
 }
 
 export const ChecklistView: React.FC<ChecklistViewProps> = ({
@@ -54,10 +65,19 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
   checklists,
   workOrders = [],
   workshops = [],
+  closedReports = [],
   onSubmitChecklist,
   onCreateWorkOrderFromChecklist,
+  onCloseChecklistReport,
 }) => {
-  const [activeMode, setActiveMode] = useState<'new' | 'history'>('new');
+  const [activeMode, setActiveMode] = useState<'new' | 'history' | 'database'>('new');
+  const [closingChecklist, setClosingChecklist] = useState<FleetChecklist | null>(null);
+  const [closingResolutionText, setClosingResolutionText] = useState<string>('');
+  const [markAvailableOnClose, setMarkAvailableOnClose] = useState<boolean>(true);
+  const [dbSearch, setDbSearch] = useState<string>('');
+  const [dbAmbFilter, setDbAmbFilter] = useState<string>('Todas');
+  const [dbFromDate, setDbFromDate] = useState<string>('');
+  const [dbToDate, setDbToDate] = useState<string>('');
   const [selectedAmbId, setSelectedAmbId] = useState<string>(
     ambulances[0]?.id || 'amb-1'
   );
@@ -233,6 +253,77 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
   const faultCount = items.filter((i) => i.status === 'Avería').length;
   const obsCount = items.filter((i) => i.status === 'Observación').length;
 
+  const filteredClosedReports = useMemo(() => {
+    const q = dbSearch.trim().toLowerCase();
+    return closedReports.filter((r) => {
+      if (dbAmbFilter !== 'Todas' && r.ambulanceId !== dbAmbFilter) return false;
+      if (dbFromDate && r.closedAt < dbFromDate) return false;
+      if (dbToDate && r.closedAt > dbToDate) return false;
+      if (!q) return true;
+      return (
+        r.ambulanceCode.toLowerCase().includes(q) ||
+        r.plate.toLowerCase().includes(q) ||
+        r.reporterName.toLowerCase().includes(q) ||
+        r.summary.toLowerCase().includes(q) ||
+        r.resolution.toLowerCase().includes(q) ||
+        (r.linkedWorkOrderCode || '').toLowerCase().includes(q)
+      );
+    });
+  }, [closedReports, dbSearch, dbAmbFilter, dbFromDate, dbToDate]);
+
+  const handleExportClosedCsv = () => {
+    const escapeCell = (val: string | number | undefined) => {
+      const s = String(val ?? '').replace(/"/g, '""');
+      return `"${s}"`;
+    };
+    const headers = [
+      'ID',
+      'Fecha Cierre',
+      'Fecha Parte',
+      'Unidad',
+      'Matrícula',
+      'Kilómetros',
+      'Urgencia',
+      'Reportado por',
+      'Cerrado por',
+      'Tipo Cierre',
+      'Orden Taller',
+      'Taller',
+      'Resumen / Avería',
+      'Anomalías',
+      'Resolución',
+    ];
+    const rows = filteredClosedReports.map((r) =>
+      [
+        r.id,
+        r.closedAt,
+        r.reportDate,
+        r.ambulanceCode,
+        r.plate,
+        r.mileage,
+        r.urgency,
+        r.reporterName,
+        r.closedBy,
+        r.closureType,
+        r.linkedWorkOrderCode || '',
+        r.workshopName || '',
+        r.summary,
+        r.anomalies.join(' | '),
+        r.resolution,
+      ]
+        .map(escapeCell)
+        .join(';')
+    );
+    const csvContent = '\uFEFF' + [headers.map(escapeCell).join(';'), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `base_datos_partes_cerrados_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
       {/* Selector de pestaña interna: Nueva Checklist vs Historial de Partes a Taller */}
@@ -280,6 +371,18 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
           >
             <FileText className="w-4 h-4" />
             Partes Enviados ({checklists.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMode('database')}
+            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+              activeMode === 'database'
+                ? 'bg-indigo-700 text-white shadow-sm'
+                : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100 border border-indigo-200'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            Base de Datos ({closedReports.length})
           </button>
         </div>
       </div>
@@ -826,18 +929,52 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                       PDF / Imprimir
                     </button>
                     {chk.workshopStatus === 'Pendiente de Asignar Taller' ? (
-                      <button
-                        onClick={() => onCreateWorkOrderFromChecklist(chk)}
-                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
-                      >
-                        <Wrench className="w-3.5 h-3.5" />
-                        Crear Orden Externa
-                      </button>
+                      <>
+                        <button
+                          onClick={() => onCreateWorkOrderFromChecklist(chk)}
+                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          Crear Orden Externa
+                        </button>
+                        {onCloseChecklistReport && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setClosingChecklist(chk);
+                              setClosingResolutionText('');
+                              setMarkAvailableOnClose(true);
+                            }}
+                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            Cerrar Parte
+                          </button>
+                        )}
+                      </>
                     ) : (
-                      <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold inline-flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4" />
-                        {chk.workshopStatus}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold inline-flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4" />
+                          {chk.workshopStatus}
+                          {chk.closedAt ? ` (${chk.closedAt})` : ''}
+                        </span>
+                        {chk.workshopStatus === 'Orden Externa Creada' &&
+                          onCloseChecklistReport && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClosingChecklist(chk);
+                                setClosingResolutionText('');
+                                setMarkAvailableOnClose(true);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              Cerrar Parte
+                            </button>
+                          )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -846,6 +983,13 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                   <strong>Observaciones del Responsable de Flota:</strong>{' '}
                   {chk.generalObservations}
                 </p>
+
+                {chk.workshopStatus === 'Cerrada / Resuelta' && chk.closingResolution && (
+                  <p className="text-xs text-indigo-900 bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                    <strong>Resolución de Cierre ({chk.closedAt} • {chk.closedBy}):</strong>{' '}
+                    {chk.closingResolution}
+                  </p>
+                )}
 
                 {/* Anomalías Mecánicas Reportadas */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -969,6 +1113,202 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
               </div>
             );
           })}
+        </div>
+      ) : (
+        /* Base de Datos de Partes Cerrados (Firestore + Local + Exportación CSV/Excel) */
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Database className="w-4 h-4 text-indigo-600" />
+                  Base de Datos de Partes Cerrados
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Registro histórico guardado en Firebase Firestore (<code>ambufleet_closed_reports</code>), copia local y Google Sheets (si el webhook está activo).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportClosedCsv}
+                disabled={filteredClosedReports.length === 0}
+                className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+              >
+                <Download className="w-4 h-4" />
+                Exportar CSV / Excel ({filteredClosedReports.length})
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={dbSearch}
+                  onChange={(e) => setDbSearch(e.target.value)}
+                  placeholder="Buscar matrícula, avería, resolución..."
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-xs"
+                />
+              </div>
+              <select
+                value={dbAmbFilter}
+                onChange={(e) => setDbAmbFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-slate-300 text-xs bg-white"
+              >
+                <option value="Todas">Todas las unidades</option>
+                {ambulances.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} — {a.plate}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={dbFromDate}
+                onChange={(e) => setDbFromDate(e.target.value)}
+                title="Fecha cierre desde"
+                className="px-3 py-2 rounded-lg border border-slate-300 text-xs"
+              />
+              <input
+                type="date"
+                value={dbToDate}
+                onChange={(e) => setDbToDate(e.target.value)}
+                title="Fecha cierre hasta"
+                className="px-3 py-2 rounded-lg border border-slate-300 text-xs"
+              />
+            </div>
+
+            {filteredClosedReports.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                No hay partes cerrados registrados con estos filtros. Pulsa <strong>"Cerrar Parte"</strong> en un parte enviado o cierra una orden de taller para registrarlo automáticamente.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px]">
+                      <th className="py-2.5 px-3">Cierre</th>
+                      <th className="py-2.5 px-3">Unidad</th>
+                      <th className="py-2.5 px-3">Origen</th>
+                      <th className="py-2.5 px-3">Resumen / Avería</th>
+                      <th className="py-2.5 px-3">Resolución</th>
+                      <th className="py-2.5 px-3">Cerrado por</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredClosedReports.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-800">
+                          {r.closedAt}
+                          <div className="text-[10px] text-slate-400">
+                            Parte: {r.reportDate}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-bold text-[10px]">
+                            {r.ambulanceCode}
+                          </span>
+                          <div className="text-[11px] text-slate-600 mt-0.5">
+                            {r.plate} • {r.mileage.toLocaleString()} km
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              r.closureType === 'Orden de Taller'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-indigo-100 text-indigo-800'
+                            }`}
+                          >
+                            {r.closureType}
+                          </span>
+                          {r.linkedWorkOrderCode && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              {r.linkedWorkOrderCode} {r.workshopName ? `• ${r.workshopName}` : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 max-w-xs">
+                          <p className="text-slate-800 font-medium line-clamp-2">
+                            {r.summary}
+                          </p>
+                          <span className="text-[10px] text-slate-400">
+                            Reportó: {r.reporterName}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 max-w-xs text-slate-700">
+                          {r.resolution}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-600">
+                          {r.closedBy}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cerrar Parte Directamente */}
+      {closingChecklist && onCloseChecklistReport && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-indigo-600" />
+              Cerrar Parte y Guardar en Base de Datos
+            </h3>
+            <p className="text-xs text-slate-600">
+              {closingChecklist.generalObservations}
+            </p>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Resolución / Motivo de cierre
+              </label>
+              <textarea
+                rows={3}
+                value={closingResolutionText}
+                onChange={(e) => setClosingResolutionText(e.target.value)}
+                placeholder="Ej: Dotación repuesta en campa, bombilla sustituida, falsa alarma..."
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                checked={markAvailableOnClose}
+                onChange={(e) => setMarkAvailableOnClose(e.target.checked)}
+                className="rounded border-slate-300 text-indigo-600"
+              />
+              Marcar ambulancia como <strong>Disponible</strong> (si no está en otra orden de taller)
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setClosingChecklist(null)}
+                className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onCloseChecklistReport(
+                    closingChecklist.id,
+                    closingResolutionText.trim() || 'Resuelto y cerrado.',
+                    markAvailableOnClose
+                  );
+                  setClosingChecklist(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Confirmar Cierre
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -4,6 +4,7 @@ import {
   AmbulanceStatus,
   AuditLogEntry,
   BoardTask,
+  ClosedReportRecord,
   ExternalWorkshop,
   FleetChecklist,
   PreventiveSchedule,
@@ -86,6 +87,8 @@ import {
   publishPublicPlates,
   subscribePendingUnitReports,
   markUnitReportImported,
+  saveClosedReportToFirebase,
+  subscribeClosedReports,
 } from './utils/firebaseSync';
 const UnitReportView = lazy(() =>
   import('./components/UnitReportView').then((m) => ({
@@ -115,6 +118,7 @@ import {
   saveDriveSecretToken,
   uploadDataUrlToUnitFolder,
   openGoogleDriveFolder,
+  appendClosedReportToGoogleSheet,
 } from './utils/driveSync';
 import {
   LayoutDashboard,
@@ -439,6 +443,9 @@ export function App() {
     });
   };
 
+  const [closedReports, setClosedReports] = useState<ClosedReportRecord[]>(() =>
+    safeLoadFromStorage(`${STORAGE_KEY}_closed_reports`, [])
+  );
   // Detector de estado Online / Offline (PWA)
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -667,6 +674,33 @@ export function App() {
 
     return () => unsubReports();
   }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline, ambulances]);
+
+  // Suscripción en tiempo real a la base de datos de partes cerrados (ambufleet_closed_reports)
+  useEffect(() => {
+    if (!isAuthenticated || !cloudConfig.enabled || !isOnline) return;
+    const pid =
+      cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId;
+    const key = cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey;
+
+    const unsubClosed = subscribeClosedReports(
+      (remoteRecords) => {
+        setClosedReports((prev) => {
+          const merged = new Map<string, ClosedReportRecord>();
+          prev.forEach((r) => merged.set(r.id, r));
+          remoteRecords.forEach((r) => merged.set(r.id, r as ClosedReportRecord));
+          const list = Array.from(merged.values()).sort((a, b) =>
+            b.closedAtIso > a.closedAtIso ? 1 : -1
+          );
+          safeSaveToStorage(`${STORAGE_KEY}_closed_reports`, list);
+          return list;
+        });
+      },
+      pid,
+      key
+    );
+
+    return () => unsubClosed();
+  }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline]);
 
   // Publicar catálogo mínimo de matrículas para el acceso rápido de unidades
   useEffect(() => {
@@ -1448,6 +1482,92 @@ export function App() {
     }
   };
 
+  const persistClosedReport = (record: ClosedReportRecord) => {
+    setClosedReports((prev) => {
+      const next = [record, ...prev.filter((r) => r.id !== record.id)];
+      safeSaveToStorage(`${STORAGE_KEY}_closed_reports`, next);
+      return next;
+    });
+    if (cloudConfig.enabled && isOnline) {
+      const pid =
+        cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId;
+      const key = cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey;
+      void saveClosedReportToFirebase(record, pid, key);
+    }
+    void appendClosedReportToGoogleSheet(record);
+  };
+
+  const handleCloseChecklistReport = (
+    checklistId: string,
+    resolution: string,
+    markAmbulanceAvailable: boolean
+  ) => {
+    const chk = checklists.find((c) => c.id === checklistId);
+    if (!chk) return;
+    const today = getLocalDateString();
+    const nowIso = new Date().toISOString();
+    const closedBy = `${currentRole} de Flota`;
+
+    setChecklists((prev) =>
+      prev.map((c) =>
+        c.id === checklistId
+          ? {
+              ...c,
+              workshopStatus: 'Cerrada / Resuelta',
+              closedAt: today,
+              closedBy,
+              closingResolution: resolution.trim() || 'Resuelto y cerrado.',
+            }
+          : c
+      )
+    );
+
+    if (markAmbulanceAvailable) {
+      const hasOtherActiveWo = workOrders.some(
+        (w) =>
+          w.ambulanceId === chk.ambulanceId &&
+          w.id !== chk.linkedWorkOrderId &&
+          w.status === 'En taller'
+      );
+      if (!hasOtherActiveWo) {
+        handleUpdateAmbulanceStatus(chk.ambulanceId, 'Disponible');
+      }
+    }
+
+    const amb = ambulances.find((a) => a.id === chk.ambulanceId);
+    const linkedWo = chk.linkedWorkOrderId
+      ? workOrders.find((w) => w.id === chk.linkedWorkOrderId)
+      : undefined;
+    const linkedWs = linkedWo
+      ? workshops.find((w) => w.id === linkedWo.workshopId)
+      : undefined;
+
+    const anomalies = chk.items
+      .filter((i) => i.status !== 'OK')
+      .map((i) => `${i.label}: ${i.comment || i.status}`);
+
+    persistClosedReport({
+      id: `closed-${chk.id}`,
+      checklistId: chk.id,
+      ambulanceId: chk.ambulanceId,
+      ambulanceCode: amb?.code || '?',
+      plate: amb?.plate || '',
+      reportDate: chk.date,
+      closedAt: today,
+      closedAtIso: nowIso,
+      reporterName: chk.inspectorName,
+      closedBy,
+      mileage: chk.mileageAtInspection,
+      urgency: chk.overallUrgency,
+      summary: chk.generalObservations,
+      anomalies,
+      resolution: resolution.trim() || 'Resuelto y cerrado.',
+      closureType: linkedWo ? 'Orden de Taller' : 'Cierre Directo',
+      linkedWorkOrderCode: linkedWo?.code,
+      workshopName: linkedWs?.name,
+    });
+  };
+
   const handleUpdateWorkOrderStatus = (woId: string, status: WorkOrderStatus) => {
     const wo = workOrders.find((w) => w.id === woId);
     if (wo && wo.status !== status) {
@@ -1499,6 +1619,51 @@ export function App() {
               : a
           )
         );
+        if (wo.sourceChecklistId) {
+          const chk = checklists.find((c) => c.id === wo.sourceChecklistId);
+          if (chk && chk.workshopStatus !== 'Cerrada / Resuelta') {
+            const resolutionText =
+              wo.workshopReport?.trim() || `Cerrada vía orden ${wo.code}`;
+            const closedBy = `${currentRole} de Flota`;
+            setChecklists((prev) =>
+              prev.map((c) =>
+                c.id === chk.id
+                  ? {
+                      ...c,
+                      workshopStatus: 'Cerrada / Resuelta',
+                      closedAt: today,
+                      closedBy,
+                      closingResolution: resolutionText,
+                    }
+                  : c
+              )
+            );
+            const amb = ambulances.find((a) => a.id === chk.ambulanceId);
+            const ws = workshops.find((w) => w.id === wo.workshopId);
+            persistClosedReport({
+              id: `closed-${chk.id}`,
+              checklistId: chk.id,
+              ambulanceId: chk.ambulanceId,
+              ambulanceCode: amb?.code || '?',
+              plate: amb?.plate || '',
+              reportDate: chk.date,
+              closedAt: today,
+              closedAtIso: new Date().toISOString(),
+              reporterName: chk.inspectorName,
+              closedBy,
+              mileage: chk.mileageAtInspection,
+              urgency: chk.overallUrgency,
+              summary: chk.generalObservations,
+              anomalies: chk.items
+                .filter((i) => i.status !== 'OK')
+                .map((i) => `${i.label}: ${i.comment || i.status}`),
+              resolution: resolutionText,
+              closureType: 'Orden de Taller',
+              linkedWorkOrderCode: wo.code,
+              workshopName: ws?.name,
+            });
+          }
+        }
       }
     }
   };
@@ -3106,8 +3271,10 @@ export function App() {
             checklists={checklists}
             workOrders={workOrders}
             workshops={workshops}
+            closedReports={closedReports}
             onSubmitChecklist={handleSubmitChecklist}
             onCreateWorkOrderFromChecklist={handleCreateWorkOrderFromChecklist}
+            onCloseChecklistReport={handleCloseChecklistReport}
           />
         )}
 
