@@ -181,3 +181,26 @@ export const formatBytes = (bytes: number): string => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
+
+const BOSS_EMAIL_KEY = `${STORAGE_KEY}_boss_email`;
+
+export const getSavedBossEmail = (): string => {
+  try {
+    return localStorage.getItem(BOSS_EMAIL_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+export const saveBossEmail = (email: string): void => {
+  try {
+    const clean = email.trim();
+    if (clean) {
+      localStorage.setItem(BOSS_EMAIL_KEY, clean);
+    } else {
+      localStorage.removeItem(BOSS_EMAIL_KEY);
+    }
+  } catch {
+    // ignorar
+  }
+};

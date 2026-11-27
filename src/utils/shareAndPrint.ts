@@ -566,3 +566,140 @@ export const exportFleetAndStockToCSV = (
   a.click();
   URL.revokeObjectURL(url);
 };
+
+export interface BreakdownReportRow {
+  date: string;
+  code: string;
+  ambulanceCode: string;
+  plate: string;
+  mileage: number;
+  title: string;
+  workshopName: string;
+  status: string;
+  daysInShop: number;
+  partsSummary: string;
+}
+
+export const printBreakdownsManagementReport = (params: {
+  fromDate: string;
+  toDate: string;
+  ambulanceLabel: string;
+  bossEmail?: string;
+  rows: BreakdownReportRow[];
+  totalUnitsAffected: number;
+  totalDaysInShop: number;
+  openCount: number;
+}) => {
+  const win = window.open('', '_blank', 'width=920,height=900');
+  if (!win) return;
+
+  const rowsHtml =
+    params.rows.length > 0
+      ? params.rows
+          .map(
+            (r) => `
+          <tr>
+            <td style="padding:7px;border:1px solid #cbd5e1;white-space:nowrap;">${escapeHtml(
+              r.date
+            )}</td>
+            <td style="padding:7px;border:1px solid #cbd5e1;font-weight:bold;">${escapeHtml(
+              r.ambulanceCode
+            )}<br/><span style="font-size:10px;color:#64748b;font-weight:normal;">${escapeHtml(
+              r.plate
+            )}</span></td>
+            <td style="padding:7px;border:1px solid #cbd5e1;"><strong>${escapeHtml(
+              r.code
+            )}</strong><br/>${escapeHtml(r.title)}</td>
+            <td style="padding:7px;border:1px solid #cbd5e1;">${escapeHtml(
+              r.workshopName
+            )}</td>
+            <td style="padding:7px;border:1px solid #cbd5e1;text-align:center;">${escapeHtml(
+              r.status
+            )}</td>
+            <td style="padding:7px;border:1px solid #cbd5e1;text-align:center;font-weight:bold;">${
+              r.daysInShop
+            }d</td>
+            <td style="padding:7px;border:1px solid #cbd5e1;font-size:11px;">${escapeHtml(
+              r.partsSummary || '—'
+            )}</td>
+          </tr>`
+          )
+          .join('')
+      : `<tr><td colspan="7" style="padding:14px;border:1px solid #cbd5e1;text-align:center;">No hay roturas registradas en el periodo seleccionado.</td></tr>`;
+
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Informe de Roturas - Ambu-lzflota</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; padding: 24px; max-width: 960px; margin: 0 auto; }
+        .no-print { margin-bottom: 14px; display: flex; justify-content: flex-end; }
+        .btn { background: #0f172a; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="no-print">
+        <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      </div>
+      <div style="border-bottom:3px solid #0f172a;padding-bottom:10px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end;">
+        <div>
+          <h1 style="margin:0;font-size:20px;">INFORME DE ROTURAS Y AVERÍAS DE FLOTA</h1>
+          <p style="margin:4px 0 0;font-size:12px;color:#475569;">Ambu-lzflota • Periodo: ${escapeHtml(
+            params.fromDate || 'Inicio'
+          )} a ${escapeHtml(params.toDate || 'Hoy')} • Filtro: ${escapeHtml(
+    params.ambulanceLabel
+  )}</p>
+        </div>
+        <div style="text-align:right;font-size:11px;color:#475569;">
+          ${
+            params.bossEmail
+              ? `<div><strong>Destinatario:</strong> ${escapeHtml(params.bossEmail)}</div>`
+              : ''
+          }
+          <div><strong>Generado:</strong> ${escapeHtml(
+            new Date().toLocaleDateString('es-ES')
+          )}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;font-size:12px;">
+        <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px;text-align:center;">
+          <div style="color:#64748b;font-size:11px;">Total Roturas</div>
+          <div style="font-size:20px;font-weight:900;">${params.rows.length}</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px;text-align:center;">
+          <div style="color:#64748b;font-size:11px;">Unidades Afectadas</div>
+          <div style="font-size:20px;font-weight:900;">${params.totalUnitsAffected}</div>
+        </div>
+        <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:10px;text-align:center;">
+          <div style="color:#be123c;font-size:11px;">Abiertas / En Taller</div>
+          <div style="font-size:20px;font-weight:900;color:#be123c;">${params.openCount}</div>
+        </div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px;text-align:center;">
+          <div style="color:#b45309;font-size:11px;">Días Parado Totales</div>
+          <div style="font-size:20px;font-weight:900;color:#b45309;">${params.totalDaysInShop}d</div>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr style="background:#0f172a;color:#fff;">
+            <th style="padding:8px;border:1px solid #0f172a;text-align:left;">Fecha</th>
+            <th style="padding:8px;border:1px solid #0f172a;text-align:left;">Unidad</th>
+            <th style="padding:8px;border:1px solid #0f172a;text-align:left;">Orden / Rotura</th>
+            <th style="padding:8px;border:1px solid #0f172a;text-align:left;">Taller Externo</th>
+            <th style="padding:8px;border:1px solid #0f172a;">Estado</th>
+            <th style="padding:8px;border:1px solid #0f172a;">Días</th>
+            <th style="padding:8px;border:1px solid #0f172a;text-align:left;">Repuestos Propios</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </body>
+    </html>
+  `);
+  win.document.close();
+};

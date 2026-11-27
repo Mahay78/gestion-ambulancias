@@ -29,6 +29,7 @@ import {
   FileWarning,
   CalendarPlus,
   Bell,
+  FileText,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -48,6 +49,7 @@ interface DashboardViewProps {
       | 'parts'
   ) => void;
   onCreateWorkOrderFromChecklist: (checklist: FleetChecklist) => void;
+  onOpenBreakdownReport?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -58,6 +60,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   spareParts,
   onNavigate,
   onCreateWorkOrderFromChecklist,
+  onOpenBreakdownReport,
 }) => {
   const availableCount = ambulances.filter((a) => a.status === 'Disponible').length;
   const workshopCount = ambulances.filter((a) => a.status === 'En taller').length;
@@ -280,6 +283,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="px-2.5 py-1 rounded-full bg-amber-500 text-white">
               ≤ 30 días: {days30DocsCount}
             </span>
+            {onOpenBreakdownReport && (
+              <button
+                type="button"
+                onClick={onOpenBreakdownReport}
+                className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold flex items-center gap-1"
+                title="Generar informe de roturas en PDF o enviar por Email al Jefe"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Informe Roturas (Jefe)
+              </button>
+            )}
             <button
               type="button"
               onClick={() =>

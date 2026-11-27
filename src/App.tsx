@@ -97,8 +97,10 @@ import {
   EyeOff,
   Menu,
   Sparkles,
+  FileText,
 } from 'lucide-react';
 import { AiAssistantModal } from './components/AiAssistantModal';
+import { BreakdownReportModal } from './components/BreakdownReportModal';
 
 type ActiveTab =
   | 'dashboard'
@@ -220,6 +222,8 @@ export function App() {
   const [firebaseEmail, setFirebaseEmail] = useState<string>('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const [showAiModal, setShowAiModal] = useState<boolean>(false);
+  const [showBreakdownReportModal, setShowBreakdownReportModal] =
+    useState<boolean>(false);
   const [isUnitReportMode, setIsUnitReportMode] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -2051,6 +2055,14 @@ export function App() {
           </button>
           <button
             type="button"
+            onClick={() => setShowBreakdownReportModal(true)}
+            className="w-full py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 font-bold text-[11px] flex items-center justify-center gap-1.5"
+          >
+            <FileText className="w-3.5 h-3.5 text-rose-400" />
+            Informe Roturas (Jefe)
+          </button>
+          <button
+            type="button"
             onClick={() => {
               const link = `${window.location.origin}${window.location.pathname}?modo=parte`;
               navigator.clipboard?.writeText(link);
@@ -2313,6 +2325,7 @@ export function App() {
             spareParts={spareParts}
             onNavigate={setActiveTab}
             onCreateWorkOrderFromChecklist={handleCreateWorkOrderFromChecklist}
+            onOpenBreakdownReport={() => setShowBreakdownReportModal(true)}
           />
         )}
 
@@ -2731,6 +2744,16 @@ export function App() {
             spareParts,
           }}
           onClose={() => setShowAiModal(false)}
+        />
+      )}
+
+      {showBreakdownReportModal && (
+        <BreakdownReportModal
+          ambulances={ambulances}
+          workOrders={workOrders}
+          checklists={checklists}
+          workshops={workshops}
+          onClose={() => setShowBreakdownReportModal(false)}
         />
       )}
     </div>
