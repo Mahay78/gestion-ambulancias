@@ -19,6 +19,46 @@
   label {
     touch-action: manipulation;
   }
+
+  button {
+    transition-property: transform, background-color, border-color, color, box-shadow, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.75);
+  }
+
+  button[class*='bg-blue-']:not(:disabled),
+  button[class*='bg-emerald-']:not(:disabled),
+  button[class*='bg-rose-']:not(:disabled),
+  button[class*='bg-amber-']:not(:disabled),
+  button[class*='bg-slate-900']:not(:disabled) {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
+  }
+
+  button[class*='bg-blue-']:not(:disabled):hover,
+  button[class*='bg-emerald-']:not(:disabled):hover,
+  button[class*='bg-rose-']:not(:disabled):hover,
+  button[class*='bg-amber-']:not(:disabled):hover,
+  button[class*='bg-slate-900']:not(:disabled):hover {
+    box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.22);
+  }
 }
 
 /* Utilidades para ocultar barra de scroll manteniendo desplazamiento táctil suave en móvil/tablet */

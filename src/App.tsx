@@ -1716,15 +1716,15 @@ export function App() {
             <button
               type="button"
               onClick={() => setShowBackupModal(true)}
-              className={`px-2.5 py-1.5 rounded-lg text-white text-xs font-semibold flex items-center gap-1 transition ${
+              className={`px-3 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/15 shadow-sm transition ${
                 storageStats.isWarning || quotaAlert
-                  ? 'bg-amber-600 hover:bg-amber-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  ? 'bg-amber-600 hover:bg-amber-500'
+                  : 'bg-blue-600 hover:bg-blue-500'
               }`}
             >
               <Download className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Backup</span>
-              <span className="text-[10px] px-1 py-0.2 rounded bg-black/25 font-mono">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/25 font-mono">
                 {storageStats.usagePercent}%
               </span>
             </button>
@@ -1732,7 +1732,7 @@ export function App() {
               type="button"
               onClick={handleLogout}
               title="Bloquear aplicación / Cerrar sesión"
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-200 text-xs font-medium flex items-center gap-1 border border-rose-800 transition"
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-100 text-xs font-semibold flex items-center gap-1.5 border border-rose-700/80 shadow-sm transition"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden lg:inline">Salir</span>
@@ -1748,10 +1748,10 @@ export function App() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shrink-0 transition ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shrink-0 transition ${
                   isActive
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-950/40 ring-1 ring-blue-400/40'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                 }`}
               >
                 {item.icon}
@@ -1787,7 +1787,7 @@ export function App() {
                 }}
                 className={`relative flex-1 min-w-[60px] sm:min-w-[84px] flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition ${
                   isActive
-                    ? 'bg-blue-600 text-white font-bold shadow-sm'
+                    ? 'bg-gradient-to-b from-blue-500 to-blue-600 text-white font-bold shadow-md shadow-blue-950/50 ring-1 ring-blue-400/40'
                     : 'text-slate-400 hover:text-slate-200 active:bg-slate-800'
                 }`}
               >
