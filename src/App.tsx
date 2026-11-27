@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import {
   Ambulance,
   AmbulanceStatus,
+  AuditLogEntry,
   BoardTask,
   ExternalWorkshop,
   FleetChecklist,
@@ -23,13 +24,37 @@ import {
   INITIAL_STOCK_MOVEMENTS,
   INITIAL_WORK_ORDERS,
 } from './initialData';
-import { DashboardView } from './components/DashboardView';
-import { FleetView } from './components/FleetView';
-import { PreventiveView } from './components/PreventiveView';
-import { ChecklistView } from './components/ChecklistView';
-import { WorkOrdersView } from './components/WorkOrdersView';
-import { WorkshopsView } from './components/WorkshopsView';
-import { PartsInventoryView } from './components/PartsInventoryView';
+const DashboardView = lazy(() =>
+  import('./components/DashboardView').then((m) => ({ default: m.DashboardView }))
+);
+const FleetView = lazy(() =>
+  import('./components/FleetView').then((m) => ({ default: m.FleetView }))
+);
+const PreventiveView = lazy(() =>
+  import('./components/PreventiveView').then((m) => ({
+    default: m.PreventiveView,
+  }))
+);
+const ChecklistView = lazy(() =>
+  import('./components/ChecklistView').then((m) => ({
+    default: m.ChecklistView,
+  }))
+);
+const WorkOrdersView = lazy(() =>
+  import('./components/WorkOrdersView').then((m) => ({
+    default: m.WorkOrdersView,
+  }))
+);
+const WorkshopsView = lazy(() =>
+  import('./components/WorkshopsView').then((m) => ({
+    default: m.WorkshopsView,
+  }))
+);
+const PartsInventoryView = lazy(() =>
+  import('./components/PartsInventoryView').then((m) => ({
+    default: m.PartsInventoryView,
+  }))
+);
 import { exportFleetAndStockToCSV } from './utils/shareAndPrint';
 import {
   STORAGE_KEY,
@@ -62,7 +87,11 @@ import {
   subscribePendingUnitReports,
   markUnitReportImported,
 } from './utils/firebaseSync';
-import { UnitReportView } from './components/UnitReportView';
+const UnitReportView = lazy(() =>
+  import('./components/UnitReportView').then((m) => ({
+    default: m.UnitReportView,
+  }))
+);
 import { addMonthsLocal, getLocalDateString } from './utils/dateUtils';
 import {
   verifyLocalAccessPassword,
@@ -110,9 +139,28 @@ import {
   FileText,
   FolderOpen,
   LayoutGrid,
+  Search,
+  Bell,
+  Moon,
+  Sun,
+  Type,
+  HelpCircle,
+  ShieldCheck,
 } from 'lucide-react';
-import { AiAssistantModal } from './components/AiAssistantModal';
-import { BreakdownReportModal } from './components/BreakdownReportModal';
+const AiAssistantModal = lazy(() =>
+  import('./components/AiAssistantModal').then((m) => ({
+    default: m.AiAssistantModal,
+  }))
+);
+const BreakdownReportModal = lazy(() =>
+  import('./components/BreakdownReportModal').then((m) => ({
+    default: m.BreakdownReportModal,
+  }))
+);
+import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { AlertCenterModal, buildUnifiedAlerts } from './components/AlertCenterModal';
+import { AuditLogModal } from './components/AuditLogModal';
+import { HelpAndOnboardingModal } from './components/HelpAndOnboardingModal';
 import { PizarraView, collectUnitTodos } from './components/PizarraView';
 
 type ActiveTab =
@@ -238,6 +286,16 @@ export function App() {
   const [showAiModal, setShowAiModal] = useState<boolean>(false);
   const [showBreakdownReportModal, setShowBreakdownReportModal] =
     useState<boolean>(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState<boolean>(false);
+  const [showAlertCenter, setShowAlertCenter] = useState<boolean>(false);
+  const [showAuditLog, setShowAuditLog] = useState<boolean>(false);
+  const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
+  const [darkMode, setDarkMode] = useState<boolean>(() =>
+    safeLoadFromStorage<boolean>(`${STORAGE_KEY}_darkMode`, false)
+  );
+  const [largeText, setLargeText] = useState<boolean>(() =>
+    safeLoadFromStorage<boolean>(`${STORAGE_KEY}_largeText`, false)
+  );
   const [driveWebhookUrl, setDriveWebhookUrl] = useState<string>(() =>
     getDriveWebhookUrl()
   );
@@ -267,6 +325,7 @@ export function App() {
     workOrders: WorkOrder[];
     spareParts: SparePart[];
     stockMovements: StockMovement[];
+    auditLogs?: AuditLogEntry[];
   } | null>(null);
   const [authFailedAttempts, setAuthFailedAttempts] = useState<number>(0);
   const [authLockUntil, setAuthLockUntil] = useState<number>(0);
@@ -314,6 +373,36 @@ export function App() {
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(() =>
     safeLoadFromStorage(`${STORAGE_KEY}_movements`, INITIAL_STOCK_MOVEMENTS)
   );
+
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() =>
+    safeLoadFromStorage<AuditLogEntry[]>(`${STORAGE_KEY}_audit`, [])
+  );
+
+  const logAudit = (action: string, target: string, details?: string) => {
+    const entry: AuditLogEntry = {
+      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      role: currentRole,
+      action,
+      target,
+      details: details || '',
+    };
+    setAuditLogs((prev) => [entry, ...prev].slice(0, 400));
+  };
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark-campa', darkMode);
+      safeSaveToStorage(`${STORAGE_KEY}_darkMode`, darkMode);
+    }
+  }, [darkMode]);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('large-text-ui', largeText);
+      safeSaveToStorage(`${STORAGE_KEY}_largeText`, largeText);
+    }
+  }, [largeText]);
 
   // Detector de estado Online / Offline (PWA)
   useEffect(() => {
@@ -404,6 +493,9 @@ export function App() {
           }
           if (partial.stockMovements) {
             setStockMovements(partial.stockMovements as StockMovement[]);
+          }
+          if (partial.auditLogs) {
+            setAuditLogs(partial.auditLogs as AuditLogEntry[]);
           }
           setRealtimeLive(true);
           setFirebaseStatusMsg(
@@ -570,6 +662,8 @@ export function App() {
     if (prevSnap.spareParts !== spareParts) dirtyKeysRef.current.add('spareParts');
     if (prevSnap.stockMovements !== stockMovements)
       dirtyKeysRef.current.add('stockMovements');
+    if (prevSnap.auditLogs !== auditLogs)
+      dirtyKeysRef.current.add('auditLogs');
 
     prevSyncSnapshotRef.current = {
       ambulances,
@@ -579,6 +673,7 @@ export function App() {
       workOrders,
       spareParts,
       stockMovements,
+      auditLogs,
     };
 
     if (dirtyKeysRef.current.size === 0) return;
@@ -599,6 +694,7 @@ export function App() {
           workOrders,
           spareParts,
           stockMovements,
+          auditLogs,
         },
         cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
         cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey,
@@ -666,6 +762,11 @@ export function App() {
 
   useEffect(() => {
     if (!isIdbHydratedRef.current) return;
+    safeSaveToStorage(`${STORAGE_KEY}_audit`, auditLogs);
+  }, [auditLogs]);
+
+  useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     saveAutoBackupSnapshot(
       {
         ambulances,
@@ -695,7 +796,7 @@ export function App() {
     let cancelled = false;
     requestPersistentStorage();
     const hydrateFromIdb = async () => {
-      const [idbAmbs, idbWs, idbPrev, idbChk, idbWo, idbParts, idbMovs] =
+      const [idbAmbs, idbWs, idbPrev, idbChk, idbWo, idbParts, idbMovs, idbAudit] =
         await Promise.all([
           idbGet<Ambulance[]>(`${STORAGE_KEY}_ambulances`),
           idbGet<ExternalWorkshop[]>(`${STORAGE_KEY}_workshops`),
@@ -704,6 +805,7 @@ export function App() {
           idbGet<WorkOrder[]>(`${STORAGE_KEY}_workorders`),
           idbGet<SparePart[]>(`${STORAGE_KEY}_parts`),
           idbGet<StockMovement[]>(`${STORAGE_KEY}_movements`),
+          idbGet<AuditLogEntry[]>(`${STORAGE_KEY}_audit`),
         ]);
       if (cancelled) return;
       isApplyingRemoteRef.current = true;
@@ -720,6 +822,8 @@ export function App() {
         setSpareParts(hydrateSpareParts(idbParts));
       if (Array.isArray(idbMovs) && idbMovs.length > 0)
         setStockMovements(idbMovs);
+      if (Array.isArray(idbAudit) && idbAudit.length > 0)
+        setAuditLogs(idbAudit);
       isIdbHydratedRef.current = true;
       const stats = await getStorageUsageStatsAsync();
       if (!cancelled) setStorageStats(stats);
@@ -769,10 +873,16 @@ export function App() {
       documents: ensureAmbulanceDocuments(baseCreated),
     };
     setAmbulances((prev) => [...prev, created]);
+    logAudit('Alta de unidad', `${created.code} (${created.plate})`, `${created.brand} ${created.model}`);
     return newId;
   };
 
   const handleDeleteAmbulance = (id: string) => {
+    const target = ambulances.find((a) => a.id === id);
+    logAudit(
+      'Baja de unidad',
+      target ? `${target.code} (${target.plate})` : id
+    );
     setAmbulances((prev) => prev.filter((a) => a.id !== id));
     setPreventiveSchedules((prev) => prev.filter((p) => p.ambulanceId !== id));
     setChecklists((prev) => prev.filter((c) => c.ambulanceId !== id));
@@ -780,6 +890,10 @@ export function App() {
   };
 
   const handleUpdateAmbulanceStatus = (id: string, status: AmbulanceStatus) => {
+    const target = ambulances.find((a) => a.id === id);
+    if (target && target.status !== status) {
+      logAudit('Cambio de estado', `${target.code} (${target.plate})`, `${target.status} -> ${status}`);
+    }
     setAmbulances((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
@@ -1253,6 +1367,12 @@ export function App() {
       code: getNextWorkOrderCode(workOrders),
     };
     setWorkOrders((prev) => [newWo, ...prev]);
+    const ambTarget = ambulances.find((a) => a.id === woData.ambulanceId);
+    logAudit(
+      'Nueva orden taller',
+      `${newWo.code}${ambTarget ? ` • ${ambTarget.code}` : ''}`,
+      newWo.title
+    );
     if (woData.status === 'En taller') {
       handleUpdateAmbulanceStatus(woData.ambulanceId, 'En taller');
     }
@@ -1260,6 +1380,9 @@ export function App() {
 
   const handleUpdateWorkOrderStatus = (woId: string, status: WorkOrderStatus) => {
     const wo = workOrders.find((w) => w.id === woId);
+    if (wo && wo.status !== status) {
+      logAudit('Estado orden taller', wo.code, `${wo.status} -> ${status}`);
+    }
     const today = new Date().toISOString().split('T')[0];
 
     setWorkOrders((prev) =>
@@ -1973,22 +2096,30 @@ export function App() {
 
   if (isUnitReportMode) {
     return (
-      <UnitReportView
-        projectId={
-          cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+            Cargando parte rápido...
+          </div>
         }
-        apiKey={cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey}
-        onExitToLogin={() => {
-          setIsUnitReportMode(false);
-          try {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('modo');
-            window.history.replaceState({}, '', url.toString());
-          } catch {
-            // ignorar
+      >
+        <UnitReportView
+          projectId={
+            cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId
           }
-        }}
-      />
+          apiKey={cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey}
+          onExitToLogin={() => {
+            setIsUnitReportMode(false);
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('modo');
+              window.history.replaceState({}, '', url.toString());
+            } catch {
+              // ignorar
+            }
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -2248,6 +2379,16 @@ export function App() {
             <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
             Abrir Google Drive
           </button>
+          {currentRole === 'Encargado' && (
+            <button
+              type="button"
+              onClick={() => setShowAuditLog(true)}
+              className="w-full py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-[11px] flex items-center justify-center gap-1.5"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              Registro Auditoría ({auditLogs.length})
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -2381,6 +2522,72 @@ export function App() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowGlobalSearch(true)}
+              title="Búsqueda global en toda la flota"
+              className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+            >
+              <Search className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">Buscar</span>
+            </button>
+            {(() => {
+              const totalAlerts = buildUnifiedAlerts({
+                ambulances,
+                preventiveSchedules,
+                spareParts,
+                workOrders,
+                workshops,
+              }).length;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setShowAlertCenter(true)}
+                  title="Centro único de alertas"
+                  className="relative p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+                >
+                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden xl:inline">Alertas</span>
+                  {totalAlerts > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black leading-none">
+                      {totalAlerts}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
+            <button
+              type="button"
+              onClick={() => setDarkMode((v) => !v)}
+              title={darkMode ? 'Desactivar modo oscuro' : 'Activar modo oscuro nocturno'}
+              className={`p-2 rounded-xl text-xs font-semibold border transition ${
+                darkMode
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+            >
+              {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLargeText((v) => !v)}
+              title={largeText ? 'Tamaño de texto normal' : 'Aumentar tamaño de texto'}
+              className={`p-2 rounded-xl text-xs font-semibold border transition ${
+                largeText
+                  ? 'bg-blue-600 text-white border-blue-400'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+            >
+              <Type className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              title="Guía rápida, ayuda y privacidad (RGPD)"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
+            </button>
             {/* Selector de Rol: Encargado (todo) / Operador (flota, incidencias, stock, checklists) */}
             <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
               <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -2503,6 +2710,13 @@ export function App() {
           </div>
         )}
 
+        <Suspense
+          fallback={
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs font-bold text-slate-500">
+              Cargando módulo...
+            </div>
+          }
+        >
         {activeTab === 'dashboard' && (
           <DashboardView
             ambulances={ambulances}
@@ -2534,6 +2748,7 @@ export function App() {
               }
             }}
             onUpdateBoardTasks={handleUpdateBoardTasks}
+            onRestockFromPizarra={handleRestockVehiclePart}
           />
         )}
 
@@ -2628,6 +2843,7 @@ export function App() {
             onReceiveSupplierOrder={handleReceiveSupplierOrder}
           />
         )}
+        </Suspense>
       </main>
 
       {/* Modal Backup Automático, Cuota de Almacenamiento y Sincronización (Fase 0) */}
@@ -3024,26 +3240,90 @@ export function App() {
       </button>
 
       {showAiModal && (
-        <AiAssistantModal
-          fleetContext={{
-            ambulances,
-            workshops,
-            workOrders,
-            checklists,
-            preventiveSchedules,
-            spareParts,
-          }}
-          onClose={() => setShowAiModal(false)}
-        />
+        <Suspense fallback={null}>
+          <AiAssistantModal
+            fleetContext={{
+              ambulances,
+              workshops,
+              workOrders,
+              checklists,
+              preventiveSchedules,
+              spareParts,
+            }}
+            onClose={() => setShowAiModal(false)}
+          />
+        </Suspense>
       )}
 
       {showBreakdownReportModal && (
-        <BreakdownReportModal
+        <Suspense fallback={null}>
+          <BreakdownReportModal
+            ambulances={ambulances}
+            workOrders={workOrders}
+            checklists={checklists}
+            workshops={workshops}
+            onClose={() => setShowBreakdownReportModal(false)}
+          />
+        </Suspense>
+      )}
+
+      {showGlobalSearch && (
+        <GlobalSearchModal
           ambulances={ambulances}
           workOrders={workOrders}
-          checklists={checklists}
           workshops={workshops}
-          onClose={() => setShowBreakdownReportModal(false)}
+          spareParts={spareParts}
+          checklists={checklists}
+          onNavigate={(tab, ambId) => {
+            if (ambId) setQrSelectedAmbId(ambId);
+            if (
+              currentRole === 'Operador' &&
+              (tab === 'workorders' || tab === 'workshops')
+            ) {
+              setActiveTab('fleet');
+            } else {
+              setActiveTab(tab);
+            }
+            setShowGlobalSearch(false);
+          }}
+          onClose={() => setShowGlobalSearch(false)}
+        />
+      )}
+
+      {showAlertCenter && (
+        <AlertCenterModal
+          ambulances={ambulances}
+          preventiveSchedules={preventiveSchedules}
+          spareParts={spareParts}
+          workOrders={workOrders}
+          workshops={workshops}
+          onNavigate={(tab, ambId) => {
+            if (ambId) setQrSelectedAmbId(ambId);
+            if (
+              currentRole === 'Operador' &&
+              (tab === 'workorders' || tab === 'preventive')
+            ) {
+              setActiveTab('fleet');
+            } else {
+              setActiveTab(tab);
+            }
+            setShowAlertCenter(false);
+          }}
+          onClose={() => setShowAlertCenter(false)}
+        />
+      )}
+
+      {showAuditLog && (
+        <AuditLogModal
+          logs={auditLogs}
+          onClose={() => setShowAuditLog(false)}
+        />
+      )}
+
+      {showHelpModal && (
+        <HelpAndOnboardingModal
+          currentRole={currentRole}
+          onClose={() => setShowHelpModal(false)}
         />
       )}
     </div>

@@ -853,6 +853,80 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               Nueva Orden de Reparación en Taller Externo
             </h3>
             <form onSubmit={handleCreate} className="space-y-3 text-xs">
+              <div>
+                <span className="font-semibold text-slate-600 block mb-1.5">
+                  Plantillas rápidas de avería:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    {
+                      label: 'Frenos',
+                      type: 'Correctivo (Avería)' as WorkOrderType,
+                      priority: 'Urgente' as WorkOrderPriority,
+                      title: 'Revisión / sustitución pastillas y discos de freno',
+                      description:
+                        'Comprobar desgaste de pastillas, discos y nivel de líquido de frenos.',
+                    },
+                    {
+                      label: 'Batería / Alternador',
+                      type: 'Correctivo (Avería)' as WorkOrderType,
+                      priority: 'Urgente' as WorkOrderPriority,
+                      title: 'Fallo carga batería motor / alternador',
+                      description:
+                        'Verificar voltaje alternador, batería arranque y relé separador célula.',
+                    },
+                    {
+                      label: 'Neumáticos',
+                      type: 'Neumáticos / Frenos' as WorkOrderType,
+                      priority: 'Alta' as WorkOrderPriority,
+                      title: 'Sustitución y equilibrado de neumáticos',
+                      description:
+                        'Cambiar neumáticos desgastados, equilibrar y revisar paralelo.',
+                    },
+                    {
+                      label: 'A/C Célula',
+                      type: 'Climatización / Célula' as WorkOrderType,
+                      priority: 'Alta' as WorkOrderPriority,
+                      title: 'Avería climatización / A/C célula sanitaria',
+                      description:
+                        'Comprobar carga de gas, compresor y ventiladores traseros.',
+                    },
+                    {
+                      label: 'Pre-ITV',
+                      type: 'Pre-ITV / Legal' as WorkOrderType,
+                      priority: 'Media' as WorkOrderPriority,
+                      title: 'Revisión Pre-ITV completa y gases',
+                      description:
+                        'Luces prioritarias, sirena, frenado, holguras y opacidad.',
+                    },
+                    {
+                      label: 'Chapa / Lunas',
+                      type: 'Carrocería / Lunas' as WorkOrderType,
+                      priority: 'Media' as WorkOrderPriority,
+                      title: 'Reparación carrocería / sustitución luna',
+                      description:
+                        'Reparar golpe o sustituir cristal con sellado estanco.',
+                    },
+                  ].map((tpl) => (
+                    <button
+                      key={tpl.label}
+                      type="button"
+                      onClick={() =>
+                        setNewWo((prev) => ({
+                          ...prev,
+                          type: tpl.type,
+                          priority: tpl.priority,
+                          title: tpl.title,
+                          description: tpl.description,
+                        }))
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 font-semibold border border-slate-200 transition"
+                    >
+                      {tpl.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">

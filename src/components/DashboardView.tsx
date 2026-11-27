@@ -288,6 +288,78 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Disponibilidad por Base / Zona */}
+      {(() => {
+        const byBase = new Map<
+          string,
+          { total: number; available: number; workshop: number; out: number }
+        >();
+        ambulances.forEach((a) => {
+          const base = (a.baseLocation || 'Sin Base Asignada').trim();
+          const cur = byBase.get(base) || {
+            total: 0,
+            available: 0,
+            workshop: 0,
+            out: 0,
+          };
+          cur.total += 1;
+          if (a.status === 'Disponible') cur.available += 1;
+          else if (a.status === 'En taller') cur.workshop += 1;
+          else cur.out += 1;
+          byBase.set(base, cur);
+        });
+        const entries = Array.from(byBase.entries()).sort(
+          (a, b) => b[1].total - a[1].total
+        );
+        if (entries.length === 0) return null;
+        return (
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
+                Disponibilidad por Base / Zona ({entries.length})
+              </h3>
+              <span className="text-[11px] text-slate-500">
+                Pulsa para ver unidades
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {entries.map(([base, stats]) => (
+                <button
+                  key={base}
+                  type="button"
+                  onClick={() => onNavigate('fleet')}
+                  className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-blue-50/50 hover:border-blue-300 text-left transition"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      {base}
+                    </span>
+                    <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full shrink-0">
+                      {stats.available}/{stats.total} disp.
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500">
+                    {stats.workshop > 0 && (
+                      <span className="text-amber-700 font-semibold">
+                        {stats.workshop} taller
+                      </span>
+                    )}
+                    {stats.out > 0 && (
+                      <span className="text-rose-700 font-semibold">
+                        {stats.out} fuera serv.
+                      </span>
+                    )}
+                    {stats.workshop === 0 && stats.out === 0 && (
+                      <span className="text-emerald-700">100% operativa</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Panel de Alertas de Documentación y Vencimientos (30 / 15 / 7 días y Vencidos) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">

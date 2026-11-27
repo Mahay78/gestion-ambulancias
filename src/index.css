@@ -77,3 +77,31 @@
 .safe-top {
   padding-top: env(safe-area-inset-top);
 }
+
+/* Tamaño de texto ampliado para uso rápido en tablet/móvil */
+html.large-text-ui {
+  font-size: 112%;
+}
+
+/* Modo oscuro de campa para guardias nocturnas */
+html.dark-campa {
+  filter: invert(0.91) hue-rotate(180deg);
+  background-color: #0b1120;
+}
+html.dark-campa img,
+html.dark-campa video,
+html.dark-campa canvas,
+html.dark-campa .no-dark-invert {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+@media print {
+  html.dark-campa {
+    filter: none !important;
+  }
+  html.dark-campa img,
+  html.dark-campa video,
+  html.dark-campa canvas {
+    filter: none !important;
+  }
+}

@@ -20,8 +20,13 @@ import {
   PackageCheck,
   ArrowUpDown,
   QrCode,
+  Mail,
+  Tag,
 } from 'lucide-react';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
+import { WarehouseQrLabelsModal } from './WarehouseQrLabelsModal';
+import { sendEmailViaLinkedGmail } from '../utils/driveSync';
+import { getSavedBossEmail } from '../utils/storage';
 
 interface PartsInventoryViewProps {
   spareParts: SparePart[];
@@ -59,6 +64,8 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [showQrLabels, setShowQrLabels] = useState(false);
+  const [orderNotice, setOrderNotice] = useState<string | null>(null);
 
   const [newPart, setNewPart] = useState({
     sku: '',
@@ -275,6 +282,54 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             <QrCode className="w-4 h-4" />
             Escanear QR / Barras
           </button>
+          <button
+            type="button"
+            onClick={() => setShowQrLabels(true)}
+            className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold flex items-center gap-1.5"
+          >
+            <Tag className="w-4 h-4" />
+            Etiquetas QR
+          </button>
+          {lowStockCount > 0 && (
+            <button
+              type="button"
+              onClick={async () => {
+                const lines = spareParts
+                  .filter((p) => p.stockQuantity <= p.minStockAlert)
+                  .map(
+                    (p) =>
+                      `- ${p.name} (SKU: ${p.sku}) | Actual: ${p.stockQuantity} / Mín: ${p.minStockAlert} | Pedir: ${Math.max(1, p.minStockAlert * 2 - p.stockQuantity)} uds | Proveedor: ${p.supplier}`
+                  );
+                const text = `PEDIDO AUTOMÁTICO DE REPUESTOS BAJO MÍNIMO (${lines.length} refs):\n\n${lines.join('\n')}`;
+                const bossEmail = getSavedBossEmail();
+                if (bossEmail) {
+                  try {
+                    const res = await sendEmailViaLinkedGmail({
+                      to: bossEmail,
+                      subject: `Ambu-lzflota • Pedido reposición (${lines.length} repuestos)`,
+                      body: text,
+                    });
+                    if (res.ok) {
+                      setOrderNotice(`Lista de pedido enviada por email a ${bossEmail}`);
+                      setTimeout(() => setOrderNotice(null), 5000);
+                      return;
+                    }
+                  } catch {
+                    // fallback to WhatsApp
+                  }
+                }
+                window.open(
+                  `https://wa.me/?text=${encodeURIComponent(text)}`,
+                  '_blank'
+                );
+              }}
+              className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1.5"
+              title="Generar y enviar lista de compra de repuestos bajo mínimo"
+            >
+              <Mail className="w-4 h-4" />
+              Pedir Bajo Mínimos ({lowStockCount})
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowMovementModal(true)}
@@ -1110,6 +1165,17 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             }
           }}
           onClose={() => setShowBarcodeScanner(false)}
+        />
+      )}
+      {orderNotice && (
+        <div className="fixed bottom-5 right-5 z-50 bg-emerald-700 text-white text-xs font-bold px-4 py-3 rounded-xl shadow-lg">
+          {orderNotice}
+        </div>
+      )}
+      {showQrLabels && (
+        <WarehouseQrLabelsModal
+          spareParts={spareParts}
+          onClose={() => setShowQrLabels(false)}
         />
       )}
     </div>

@@ -511,8 +511,21 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                 key={section}
                 className="border border-slate-200 rounded-xl overflow-hidden"
               >
-                <div className="bg-slate-100/80 px-4 py-2.5 border-b border-slate-200 font-bold text-xs text-slate-800 uppercase tracking-wide">
-                  {section}
+                <div className="bg-slate-100/80 px-4 py-2.5 border-b border-slate-200 font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center justify-between gap-2">
+                  <span>{section}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setItems((prev) =>
+                        prev.map((it) =>
+                          it.section === section ? { ...it, status: 'OK' } : it
+                        )
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold normal-case transition"
+                  >
+                    ✓ Marcar sección OK
+                  </button>
                 </div>
                 <div className="divide-y divide-slate-200">
                   {items

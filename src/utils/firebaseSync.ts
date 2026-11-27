@@ -42,6 +42,7 @@ export interface FirebaseFleetPayload {
   workOrders: unknown[];
   spareParts: unknown[];
   stockMovements: unknown[];
+  auditLogs?: unknown[];
 }
 
 export const FLEET_COLLECTION_KEYS = [
@@ -52,6 +53,7 @@ export const FLEET_COLLECTION_KEYS = [
   'workOrders',
   'spareParts',
   'stockMovements',
+  'auditLogs',
 ] as const;
 
 export type FleetCollectionKey = (typeof FLEET_COLLECTION_KEYS)[number];
@@ -447,5 +449,34 @@ export const markUnitReportImported = async (
     );
   } catch {
     // ignorar
+  }
+};
+
+export const fetchLastUnitReportByPlate = async (
+  plateOrCode: string,
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): Promise<UnitBreakdownReport | null> => {
+  const clean = plateOrCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!clean) return null;
+  try {
+    const { db } = getFirebaseServices(projectId, apiKey);
+    const snap = await getDocs(collection(db, 'ambufleet_unit_reports'));
+    const matches: UnitBreakdownReport[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as UnitBreakdownReport;
+      const p = (data.plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const c = (data.ambulanceCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (p === clean || c === clean) {
+        matches.push({ ...data, id: d.id });
+      }
+    });
+    if (matches.length === 0) return null;
+    matches.sort((a, b) =>
+      (b.createdAtIso || '').localeCompare(a.createdAtIso || '')
+    );
+    return matches[0];
+  } catch {
+    return null;
   }
 };

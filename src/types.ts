@@ -280,3 +280,12 @@ export interface StockMovement {
   notes?: string;
   performedBy: string;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  role: UserRole;
+  action: string;
+  target: string;
+  details: string;
+}

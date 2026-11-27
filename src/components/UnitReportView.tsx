@@ -8,6 +8,7 @@ import {
   PublicPlateEntry,
   UnitBreakdownReport,
   fetchPublicPlates,
+  fetchLastUnitReportByPlate,
   submitUnitBreakdownReport,
 } from '../utils/firebaseSync';
 import { VoiceDictationButton } from './VoiceDictationButton';
@@ -63,6 +64,22 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [submittedReport, setSubmittedReport] =
     useState<UnitBreakdownReport | null>(null);
+  const [lastReport, setLastReport] = useState<UnitBreakdownReport | null>(null);
+
+  useEffect(() => {
+    const key = selectedPlateEntry?.plate || plateInput;
+    if (!key || normalizePlate(key).length < 4) {
+      setLastReport(null);
+      return;
+    }
+    let cancelled = false;
+    fetchLastUnitReportByPlate(key, projectId, apiKey).then((res) => {
+      if (!cancelled) setLastReport(res);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlateEntry?.plate, plateInput, projectId, apiKey]);
 
   useEffect(() => {
     fetchPublicPlates(projectId, apiKey).then((remotePlates) => {
@@ -308,6 +325,30 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
                     ))}
                   </div>
                 )
+              )}
+
+              {lastReport && (
+                <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="font-bold text-slate-700 block truncate">
+                      Último parte ({lastReport.date}): {lastReport.description}
+                    </span>
+                    <span className="text-slate-500">
+                      Por {lastReport.reporterName} • {lastReport.urgency}
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-full font-extrabold shrink-0 ${
+                      lastReport.status === 'imported'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {lastReport.status === 'imported'
+                      ? 'Recibido en flota'
+                      : 'Pendiente'}
+                  </span>
+                </div>
               )}
             </div>
 
