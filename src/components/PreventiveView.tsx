@@ -16,7 +16,6 @@ import {
   Layers,
   Trash2,
   Edit3,
-  HeartPulse,
 } from 'lucide-react';
 
 interface PreventiveViewProps {
@@ -38,8 +37,6 @@ const CATEGORIES: PreventiveCategory[] = [
   'Sistema Eléctrico y Baterías',
   'Suspensión y Dirección',
   'Climatización y Célula Sanitaria',
-  'Electromedicina y Camilla',
-  'Desinfección y Oxigenoterapia',
   'ITV / Legal',
 ];
 
@@ -84,20 +81,6 @@ const PREVENTIVE_TEMPLATES: PreventiveTemplate[] = [
     intervalKm: 25000,
     intervalMonths: 12,
     notes: 'Verificar dibujo mínimo >3mm y válvula metálica reforzada.',
-  },
-  {
-    id: 'tpl-electro',
-    category: 'Electromedicina y Camilla',
-    title: 'Revisión Bancada Camilla, Anclajes y Electromedicina',
-    intervalMonths: 6,
-    notes: 'Comprobar fijación 10G, cargador desfibrilador y tomas 12V/220V.',
-  },
-  {
-    id: 'tpl-desinf',
-    category: 'Desinfección y Oxigenoterapia',
-    title: 'Desinfección Profunda Célula y Circuito Oxígeno Medicinal',
-    intervalMonths: 3,
-    notes: 'Estanqueidad tomas O2, caudalímetros y tratamiento ozono/peróxido.',
   },
 ];
 
@@ -406,11 +389,6 @@ export const PreventiveView: React.FC<PreventiveViewProps> = ({
           </div>
         ) : (
           filtered.map(({ sched, amb, evalRes }) => {
-            const isSanitary =
-              sched.category === 'Electromedicina y Camilla' ||
-              sched.category === 'Desinfección y Oxigenoterapia' ||
-              sched.category === 'Climatización y Célula Sanitaria';
-
             return (
               <div
                 key={sched.id}
@@ -425,12 +403,7 @@ export const PreventiveView: React.FC<PreventiveViewProps> = ({
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <span
-                        className={`text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
-                          isSanitary ? 'text-rose-600' : 'text-blue-600'
-                        }`}
-                      >
-                        {isSanitary && <HeartPulse className="w-3.5 h-3.5" />}
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
                         {sched.category}
                       </span>
                       <h3 className="text-base font-bold text-slate-900 mt-0.5">
