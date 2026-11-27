@@ -44,13 +44,18 @@ import {
 import {
   DEFAULT_FIREBASE_CONFIG,
   FleetCollectionKey,
+  UnitBreakdownReport,
   pushFleetStateToFirebase,
   pullFleetStateFromFirebase,
   subscribeFleetRealtime,
   ensureFirebaseAuthSession,
   signInFirebaseWithEmail,
   signOutFirebase,
+  publishPublicPlates,
+  subscribePendingUnitReports,
+  markUnitReportImported,
 } from './utils/firebaseSync';
+import { UnitReportView } from './components/UnitReportView';
 import { addMonthsLocal, getLocalDateString } from './utils/dateUtils';
 import {
   verifyLocalAccessPassword,
@@ -206,6 +211,14 @@ export function App() {
   const [useFirebaseEmailLogin, setUseFirebaseEmailLogin] = useState<boolean>(false);
   const [firebaseEmail, setFirebaseEmail] = useState<string>('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+  const [isUnitReportMode, setIsUnitReportMode] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('modo') === 'parte';
+    } catch {
+      return false;
+    }
+  });
   const isApplyingRemoteRef = useRef<boolean>(false);
   const hasHydratedRef = useRef<boolean>(false);
   const dirtyKeysRef = useRef<Set<FleetCollectionKey>>(new Set());
@@ -380,6 +393,88 @@ export function App() {
       if (unsubscribe) unsubscribe();
     };
   }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline]);
+
+  // Escuchar partes rápidos enviados desde los móviles de las unidades (por matrícula)
+  useEffect(() => {
+    if (!isAuthenticated || !cloudConfig.enabled || !isOnline) return;
+    const pid =
+      cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId;
+    const key = cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey;
+
+    const unsubReports = subscribePendingUnitReports(
+      (reports: UnitBreakdownReport[]) => {
+        setChecklists((prev) => {
+          const existingIds = new Set(prev.map((c) => c.id));
+          const incoming: FleetChecklist[] = [];
+          for (const rep of reports) {
+            if (existingIds.has(rep.id)) {
+              markUnitReportImported(rep.id, pid, key);
+              continue;
+            }
+            const matchedAmb =
+              ambulances.find((a) => a.id === rep.ambulanceId) ||
+              ambulances.find(
+                (a) =>
+                  a.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() ===
+                  rep.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+              );
+
+            incoming.push({
+              id: rep.id,
+              ambulanceId: matchedAmb?.id || ambulances[0]?.id || 'amb-1',
+              date: rep.date || getLocalDateString(),
+              inspectorName: `${rep.reporterName} (Unidad ${rep.plate})`,
+              mileageAtInspection: rep.mileage || matchedAmb?.mileage || 0,
+              overallUrgency: rep.urgency,
+              items: [
+                {
+                  id: `unit-item-${rep.id}`,
+                  section: 'Motor y Niveles',
+                  label: `Avería reportada desde unidad (${rep.plate})`,
+                  status: 'Avería',
+                  comment: rep.description,
+                },
+              ],
+              missingParts: [],
+              generalObservations: `[PARTE UNIDAD • ${rep.plate}] ${rep.description}`,
+              workshopStatus: 'Pendiente de Asignar Taller',
+              photos: rep.photos || [],
+            });
+            markUnitReportImported(rep.id, pid, key);
+          }
+          if (incoming.length === 0) return prev;
+          setFirebaseStatusMsg(
+            `🚨 Recibido(s) ${incoming.length} parte(s) de avería desde unidad.`
+          );
+          return [...incoming, ...prev];
+        });
+      },
+      pid,
+      key
+    );
+
+    return () => unsubReports();
+  }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline, ambulances]);
+
+  // Publicar catálogo mínimo de matrículas para el acceso rápido de unidades
+  useEffect(() => {
+    if (!isAuthenticated || !cloudConfig.enabled || !isOnline) return;
+    const pid =
+      cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId;
+    const key = cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey;
+    publishPublicPlates(
+      ambulances.map((a) => ({
+        id: a.id,
+        code: a.code,
+        plate: a.plate,
+        brand: a.brand,
+        model: a.model,
+        mileage: a.mileage,
+      })),
+      pid,
+      key
+    );
+  }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline, ambulances]);
 
   // Auto-push con debounce a Firebase solo para colecciones modificadas
   useEffect(() => {
@@ -1639,6 +1734,27 @@ export function App() {
     }
   };
 
+  if (isUnitReportMode) {
+    return (
+      <UnitReportView
+        projectId={
+          cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId
+        }
+        apiKey={cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey}
+        onExitToLogin={() => {
+          setIsUnitReportMode(false);
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('modo');
+            window.history.replaceState({}, '', url.toString());
+          } catch {
+            // ignorar
+          }
+        }}
+      />
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -1776,6 +1892,20 @@ export function App() {
               Entrar a Ambu-lzflota
             </button>
           </form>
+
+          <div className="pt-3 border-t border-slate-200 text-center space-y-2">
+            <p className="text-[11px] text-slate-500 font-semibold">
+              ¿Estás en una ambulancia y quieres avisar de una avería?
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsUnitReportMode(true)}
+              className="w-full py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1.5"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              Parte Rápido Unidad (Por Matrícula)
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1835,7 +1965,22 @@ export function App() {
           })}
         </nav>
 
-        <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
+        <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              const link = `${window.location.origin}${window.location.pathname}?modo=parte`;
+              navigator.clipboard?.writeText(link);
+              setFirebaseStatusMsg(
+                `📋 Enlace de Parte Rápido copiado: ${link}`
+              );
+              setShowBackupModal(true);
+            }}
+            className="w-full py-2 px-2.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-800/80 font-bold text-[11px] flex items-center justify-center gap-1.5"
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Enlace Parte Unidad
+          </button>
           <div className="flex items-center justify-between">
             <span>Rol activo:</span>
             <strong className="text-white">{currentRole}</strong>

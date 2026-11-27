@@ -329,3 +329,124 @@ export const subscribeFleetRealtime = (
     }
   );
 };
+
+export interface PublicPlateEntry {
+  id: string;
+  code: string;
+  plate: string;
+  brand: string;
+  model: string;
+  mileage: number;
+}
+
+export interface UnitBreakdownReport {
+  id: string;
+  ambulanceId?: string;
+  ambulanceCode?: string;
+  plate: string;
+  reporterName: string;
+  mileage: number;
+  urgency: 'Normal' | 'Prioritaria' | 'Inmovilización Inmediata';
+  description: string;
+  photos: string[];
+  date: string;
+  createdAtIso: string;
+  status: 'pending' | 'imported';
+}
+
+export const publishPublicPlates = async (
+  plates: PublicPlateEntry[],
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): Promise<void> => {
+  try {
+    const { db } = getFirebaseServices(projectId, apiKey);
+    await ensureFirebaseAuthSession(projectId, apiKey);
+    await setDoc(doc(db, 'ambufleet_public', 'plates'), {
+      items: plates,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch {
+    // Silencioso si no hay conexión o auth
+  }
+};
+
+export const fetchPublicPlates = async (
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): Promise<PublicPlateEntry[] | null> => {
+  try {
+    const { db } = getFirebaseServices(projectId, apiKey);
+    await ensureFirebaseAuthSession(projectId, apiKey);
+    const snap = await getDoc(doc(db, 'ambufleet_public', 'plates'));
+    if (snap.exists() && Array.isArray(snap.data()?.items)) {
+      return snap.data().items as PublicPlateEntry[];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const submitUnitBreakdownReport = async (
+  report: Omit<UnitBreakdownReport, 'status'>,
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): Promise<{ ok: boolean; error?: string }> => {
+  try {
+    const { db } = getFirebaseServices(projectId, apiKey);
+    await ensureFirebaseAuthSession(projectId, apiKey);
+    await setDoc(doc(db, 'ambufleet_unit_reports', report.id), {
+      ...report,
+      status: 'pending',
+    });
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : 'No se pudo enviar el parte a Firebase.',
+    };
+  }
+};
+
+export const subscribePendingUnitReports = (
+  onReports: (reports: UnitBreakdownReport[]) => void,
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): (() => void) => {
+  const { db } = getFirebaseServices(projectId, apiKey);
+  const colRef = collection(db, 'ambufleet_unit_reports');
+
+  return onSnapshot(colRef, (snapshot) => {
+    const pending: UnitBreakdownReport[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as UnitBreakdownReport;
+      if (data && data.status === 'pending') {
+        pending.push({ ...data, id: docSnap.id });
+      }
+    });
+    if (pending.length > 0) {
+      onReports(pending);
+    }
+  });
+};
+
+export const markUnitReportImported = async (
+  reportId: string,
+  projectId = DEFAULT_FIREBASE_CONFIG.projectId,
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+): Promise<void> => {
+  try {
+    const { db } = getFirebaseServices(projectId, apiKey);
+    await setDoc(
+      doc(db, 'ambufleet_unit_reports', reportId),
+      { status: 'imported' },
+      { merge: true }
+    );
+  } catch {
+    // ignorar
+  }
+};
