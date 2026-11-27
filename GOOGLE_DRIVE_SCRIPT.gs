@@ -1,5 +1,9 @@
 // Pegar este código en https://script.google.com desde la cuenta flotaambulz@gmail.com
-// y en: Implementar -> Gestionar implementaciones -> Editar (lápiz) -> Versión: Nueva versión -> Implementar
+// IMPORTANTE: Cambia 'CAMBIAR_POR_TU_TOKEN_SECRETO' por una clave privada tuya
+// y pon esa misma clave en Ambu-lzflota -> Backup -> Token Secreto Drive/Email.
+// Luego: Implementar -> Gestionar implementaciones -> Editar (lápiz) -> Nueva versión -> Implementar
+
+var SECRET_TOKEN = 'CAMBIAR_POR_TU_TOKEN_SECRETO';
 
 function getOrCreateRootFolder() {
   var rootName = 'Ambu-lzflota';
@@ -12,6 +16,12 @@ function getOrCreateRootFolder() {
 function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents);
+    if (!payload.token || payload.token !== SECRET_TOKEN) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: false, error: 'Token secreto inválido o no configurado.' })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var rootFolder = getOrCreateRootFolder();
 
     // 1. Envío de correo electrónico directo desde flotaambulz@gmail.com

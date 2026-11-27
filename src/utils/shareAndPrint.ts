@@ -5,6 +5,7 @@ import {
   SparePart,
   WorkOrder,
 } from '../types';
+import { getLocalDateString } from './dateUtils';
 
 const escapeHtml = (unsafe?: string | number): string => {
   if (unsafe === undefined || unsafe === null) return '';
@@ -485,7 +486,7 @@ export const printPartsDeliveryNote = (
         <div style="text-align:right;">
           <div style="font-size:16px;font-weight:900;color:#e11d48;">${escapeHtml(wo.code)}</div>
           <div style="font-size:11px;color:#64748b;">Fecha entrega: ${escapeHtml(
-            wo.partsDeliveryDate || new Date().toISOString().split('T')[0]
+            wo.partsDeliveryDate || getLocalDateString()
           )}</div>
         </div>
       </div>
@@ -549,6 +550,11 @@ export const printPartsDeliveryNote = (
   win.document.close();
 };
 
+const csvCell = (val: string | number | undefined): string => {
+  const s = String(val ?? '').replace(/"/g, '""');
+  return `"${s}"`;
+};
+
 export const exportFleetAndStockToCSV = (
   ambulances: Ambulance[],
   spareParts: SparePart[]
@@ -559,13 +565,33 @@ export const exportFleetAndStockToCSV = (
 
   ambulances.forEach((a) => {
     lines.push(
-      `AMBULANCIA,"${a.code}","${a.plate}","${a.brand}","${a.model}","${a.status}",${a.mileage},"${a.itvExpiry}","${a.sanitaryCertExpiry}"`
+      [
+        'AMBULANCIA',
+        csvCell(a.code),
+        csvCell(a.plate),
+        csvCell(a.brand),
+        csvCell(a.model),
+        csvCell(a.status),
+        a.mileage,
+        csvCell(a.itvExpiry),
+        csvCell(a.sanitaryCertExpiry),
+      ].join(',')
     );
   });
 
   spareParts.forEach((p) => {
     lines.push(
-      `REPUESTO_ALMACEN,"${p.sku}","${p.name}","${p.category}","${p.warehouseLocation}",${p.stockQuantity},${p.minStockAlert},"${p.supplier}",""`
+      [
+        'REPUESTO_ALMACEN',
+        csvCell(p.sku),
+        csvCell(p.name),
+        csvCell(p.category),
+        csvCell(p.warehouseLocation),
+        p.stockQuantity,
+        p.minStockAlert,
+        csvCell(p.supplier),
+        '""',
+      ].join(',')
     );
   });
 
@@ -575,7 +601,7 @@ export const exportFleetAndStockToCSV = (
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ambu-lzflota_flota_y_stock_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = `ambu-lzflota_flota_y_stock_${getLocalDateString()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 };

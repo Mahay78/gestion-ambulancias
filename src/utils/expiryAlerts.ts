@@ -1,5 +1,5 @@
 import { Ambulance, DocumentType, VehicleDocument } from '../types';
-import { addMonthsLocal, getLocalDateString } from './dateUtils';
+import { addMonthsLocal, getLocalDateString, parseLocalDate } from './dateUtils';
 
 export type ExpiryAlertLevel =
   | 'expired' // < 0 días (Vencido)
@@ -26,15 +26,17 @@ export const DOCUMENT_TYPES_ORDER: DocumentType[] = [
 ];
 
 export const calculateDaysRemaining = (expiryDate: string, todayStr?: string): number => {
-  if (!expiryDate) return 9999;
   const baseToday = todayStr || getLocalDateString();
-  const exp = new Date(`${expiryDate}T00:00:00`);
-  const tod = new Date(`${baseToday}T00:00:00`);
-  return Math.ceil((exp.getTime() - tod.getTime()) / (1000 * 3600 * 24));
+  const exp = parseLocalDate(expiryDate);
+  const tod = parseLocalDate(baseToday);
+  if (!exp || !tod) return -1;
+  const expUtc = Date.UTC(exp.getFullYear(), exp.getMonth(), exp.getDate());
+  const todUtc = Date.UTC(tod.getFullYear(), tod.getMonth(), tod.getDate());
+  return Math.round((expUtc - todUtc) / (1000 * 3600 * 24));
 };
 
 export const getExpiryAlertLevel = (daysRemaining: number): ExpiryAlertLevel => {
-  if (daysRemaining < 0) return 'expired';
+  if (!Number.isFinite(daysRemaining) || daysRemaining < 0) return 'expired';
   if (daysRemaining <= 7) return 'days7';
   if (daysRemaining <= 15) return 'days15';
   if (daysRemaining <= 30) return 'days30';

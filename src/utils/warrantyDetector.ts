@@ -1,4 +1,5 @@
 import { ExternalWorkshop, WorkOrder } from '../types';
+import { addMonthsLocal, parseLocalDate } from './dateUtils';
 
 export interface ActiveWarrantyMatch {
   workOrder: WorkOrder;
@@ -36,8 +37,8 @@ export const detectActiveWarranties = (
   workOrders: WorkOrder[],
   workshops: ExternalWorkshop[]
 ): ActiveWarrantyMatch[] => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
 
   const candidates = workOrders.filter(
     (wo) =>
@@ -50,22 +51,33 @@ export const detectActiveWarranties = (
 
   for (const wo of candidates) {
     const baseDateStr = wo.exitDate || wo.completedAt || wo.entryDate || wo.createdAt;
-    const baseDate = new Date(`${baseDateStr}T00:00:00`);
-    if (isNaN(baseDate.getTime())) continue;
+    const baseDate = parseLocalDate(baseDateStr);
+    if (!baseDate) continue;
 
-    const months = parseMonthsFromWarranty(wo.warranty) ?? 6;
-    const expiryDateObj = new Date(baseDate);
-    expiryDateObj.setMonth(expiryDateObj.getMonth() + months);
-
-    const daysRemaining = Math.ceil(
-      (expiryDateObj.getTime() - today.getTime()) / (1000 * 3600 * 24)
-    );
-
+    const months = parseMonthsFromWarranty(wo.warranty);
     const kmLimit = parseKmFromWarranty(wo.warranty);
+    if (months === null && kmLimit === null) continue;
+
+    let expiryDate: string | null = null;
+    let daysRemaining: number | null = null;
+    let isTimeValid = true;
+
+    if (months !== null) {
+      expiryDate = addMonthsLocal(baseDateStr, months);
+      const expParsed = parseLocalDate(expiryDate);
+      if (expParsed) {
+        const expUtc = Date.UTC(
+          expParsed.getFullYear(),
+          expParsed.getMonth(),
+          expParsed.getDate()
+        );
+        daysRemaining = Math.round((expUtc - todayUtc) / (1000 * 3600 * 24));
+        isTimeValid = daysRemaining >= 0;
+      }
+    }
+
     const kmSinceRepair = Math.max(0, currentMileage - (wo.mileageAtEntry || 0));
     const kmRemaining = kmLimit !== null ? kmLimit - kmSinceRepair : null;
-
-    const isTimeValid = daysRemaining >= 0;
     const isKmValid = kmRemaining === null || kmRemaining >= 0;
 
     if (isTimeValid && isKmValid) {
@@ -74,7 +86,7 @@ export const detectActiveWarranties = (
         workshop: workshops.find((w) => w.id === wo.workshopId),
         warrantyText: wo.warranty,
         baseDate: baseDateStr,
-        expiryDate: expiryDateObj.toISOString().split('T')[0],
+        expiryDate,
         daysRemaining,
         kmRemaining,
         isActive: true,
@@ -82,5 +94,5 @@ export const detectActiveWarranties = (
     }
   }
 
-  return matches.sort((a, b) => (b.daysRemaining ?? 0) - (a.daysRemaining ?? 0));
+  return matches.sort((a, b) => (b.baseDate > a.baseDate ? 1 : -1));
 };

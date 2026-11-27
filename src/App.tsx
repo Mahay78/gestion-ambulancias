@@ -75,6 +75,8 @@ import {
   backupFleetJsonToGoogleDrive,
   getDriveWebhookUrl,
   saveDriveWebhookUrl,
+  getDriveSecretToken,
+  saveDriveSecretToken,
   uploadDataUrlToUnitFolder,
   openGoogleDriveFolder,
 } from './utils/driveSync';
@@ -250,7 +252,12 @@ export function App() {
     }
   });
   const isApplyingRemoteRef = useRef<boolean>(false);
+  const isIdbHydratedRef = useRef<boolean>(false);
   const hasHydratedRef = useRef<boolean>(false);
+  const [loginPinInput, setLoginPinInput] = useState<string>('');
+  const [driveSecretToken, setDriveSecretToken] = useState<string>(() =>
+    getDriveSecretToken()
+  );
   const dirtyKeysRef = useRef<Set<FleetCollectionKey>>(new Set());
   const prevSyncSnapshotRef = useRef<{
     ambulances: Ambulance[];
@@ -402,9 +409,6 @@ export function App() {
           setFirebaseStatusMsg(
             `🔄 Cambio remoto sincronizado (${new Date(updatedAt).toLocaleTimeString('es-ES')})`
           );
-          queueMicrotask(() => {
-            isApplyingRemoteRef.current = false;
-          });
         },
         (err) => {
           setRealtimeLive(false);
@@ -544,6 +548,7 @@ export function App() {
 
     const prevSnap = prevSyncSnapshotRef.current;
     if (isApplyingRemoteRef.current) {
+      isApplyingRemoteRef.current = false;
       prevSyncSnapshotRef.current = {
         ambulances,
         workshops,
@@ -619,40 +624,48 @@ export function App() {
     stockMovements,
   ]);
 
-  // Persistencia automática, control de cuota y snapshot de backup automático en LocalStorage
+  // Persistencia automática, control de cuota y snapshot de backup automático (solo tras hidratar IndexedDB)
   useEffect(() => {
     safeSaveToStorage(`${STORAGE_KEY}_role`, currentRole);
   }, [currentRole]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     safeSaveToStorage(`${STORAGE_KEY}_ambulances`, ambulances, () => setQuotaAlert(true));
   }, [ambulances]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     safeSaveToStorage(`${STORAGE_KEY}_workshops`, workshops, () => setQuotaAlert(true));
   }, [workshops]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     safeSaveToStorage(`${STORAGE_KEY}_preventive`, preventiveSchedules, () => setQuotaAlert(true));
   }, [preventiveSchedules]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     safeSaveToStorage(`${STORAGE_KEY}_checklists`, checklists, () => setQuotaAlert(true));
   }, [checklists]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     safeSaveToStorage(`${STORAGE_KEY}_workorders`, workOrders, () => setQuotaAlert(true));
   }, [workOrders]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     safeSaveToStorage(`${STORAGE_KEY}_parts`, spareParts, () => setQuotaAlert(true));
   }, [spareParts]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     safeSaveToStorage(`${STORAGE_KEY}_movements`, stockMovements, () => setQuotaAlert(true));
   }, [stockMovements]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current) return;
     saveAutoBackupSnapshot(
       {
         ambulances,
@@ -707,9 +720,7 @@ export function App() {
         setSpareParts(hydrateSpareParts(idbParts));
       if (Array.isArray(idbMovs) && idbMovs.length > 0)
         setStockMovements(idbMovs);
-      queueMicrotask(() => {
-        isApplyingRemoteRef.current = false;
-      });
+      isIdbHydratedRef.current = true;
       const stats = await getStorageUsageStatsAsync();
       if (!cancelled) setStorageStats(stats);
     };
@@ -812,7 +823,12 @@ export function App() {
     updatedDoc: VehicleDocument
   ) => {
     const targetAmb = ambulances.find((a) => a.id === ambulanceId);
-    if (updatedDoc.fileDataUrl && targetAmb) {
+    const prevDoc = targetAmb?.documents?.find((d) => d.type === updatedDoc.type);
+    if (
+      updatedDoc.fileDataUrl &&
+      targetAmb &&
+      prevDoc?.fileDataUrl !== updatedDoc.fileDataUrl
+    ) {
       uploadDataUrlToUnitFolder(
         `${targetAmb.code} (${targetAmb.plate})`,
         `${updatedDoc.type}_${updatedDoc.fileName || 'documento'}`,
@@ -1267,12 +1283,23 @@ export function App() {
       if (status === 'En taller') {
         handleUpdateAmbulanceStatus(wo.ambulanceId, 'En taller');
       } else if (status === 'Cerrada') {
+        const hasOtherInShop = workOrders.some(
+          (other) =>
+            other.id !== woId &&
+            other.ambulanceId === wo.ambulanceId &&
+            other.status === 'En taller'
+        );
         setAmbulances((prev) =>
           prev.map((a) =>
             a.id === wo.ambulanceId
               ? {
                   ...a,
-                  status: 'Disponible',
+                  status:
+                    a.status === 'Fuera de servicio'
+                      ? 'Fuera de servicio'
+                      : hasOtherInShop
+                      ? 'En taller'
+                      : 'Disponible',
                   lastServiceDate: today,
                   lastServiceMileage: a.mileage,
                 }
@@ -1603,18 +1630,35 @@ export function App() {
           'Pre-importación manual JSON'
         );
 
-        if (Array.isArray(data.ambulances))
-          setAmbulances(hydrateAmbulancesWithFullFleet(data.ambulances));
-        if (Array.isArray(data.workshops)) setWorkshops(data.workshops);
-        if (Array.isArray(data.preventiveSchedules))
-          setPreventiveSchedules(data.preventiveSchedules);
-        if (Array.isArray(data.checklists)) setChecklists(data.checklists);
-        if (Array.isArray(data.workOrders))
-          setWorkOrders(hydrateWorkOrders(data.workOrders));
-        if (Array.isArray(data.spareParts))
-          setSpareParts(hydrateSpareParts(data.spareParts));
-        if (Array.isArray(data.stockMovements))
-          setStockMovements(data.stockMovements);
+        const nextAmbulances = Array.isArray(data.ambulances)
+          ? hydrateAmbulancesWithFullFleet(data.ambulances)
+          : null;
+        const nextWorkshops = Array.isArray(data.workshops)
+          ? (data.workshops as ExternalWorkshop[])
+          : null;
+        const nextPreventive = Array.isArray(data.preventiveSchedules)
+          ? (data.preventiveSchedules as PreventiveSchedule[])
+          : null;
+        const nextChecklists = Array.isArray(data.checklists)
+          ? (data.checklists as FleetChecklist[])
+          : null;
+        const nextWorkOrders = Array.isArray(data.workOrders)
+          ? hydrateWorkOrders(data.workOrders)
+          : null;
+        const nextSpareParts = Array.isArray(data.spareParts)
+          ? hydrateSpareParts(data.spareParts)
+          : null;
+        const nextMovements = Array.isArray(data.stockMovements)
+          ? (data.stockMovements as StockMovement[])
+          : null;
+
+        if (nextAmbulances) setAmbulances(nextAmbulances);
+        if (nextWorkshops) setWorkshops(nextWorkshops);
+        if (nextPreventive) setPreventiveSchedules(nextPreventive);
+        if (nextChecklists) setChecklists(nextChecklists);
+        if (nextWorkOrders) setWorkOrders(nextWorkOrders);
+        if (nextSpareParts) setSpareParts(nextSpareParts);
+        if (nextMovements) setStockMovements(nextMovements);
         setShowBackupModal(false);
       } catch {
         alert('El archivo seleccionado no es una copia de seguridad válida.');
@@ -1694,26 +1738,29 @@ export function App() {
     setIsSyncingFirebase(false);
     if (res.ok && res.data) {
       const d = res.data;
-      if (d.ambulances)
+      isApplyingRemoteRef.current = true;
+      if (Array.isArray(d.ambulances) && d.ambulances.length > 0)
         setAmbulances(
           hydrateAmbulancesWithFullFleet(d.ambulances as Ambulance[])
         );
-      if (d.workshops) setWorkshops(d.workshops as ExternalWorkshop[]);
-      if (d.preventiveSchedules)
+      if (Array.isArray(d.workshops) && d.workshops.length > 0)
+        setWorkshops(d.workshops as ExternalWorkshop[]);
+      if (Array.isArray(d.preventiveSchedules))
         setPreventiveSchedules(d.preventiveSchedules as PreventiveSchedule[]);
-      if (d.checklists) setChecklists(d.checklists as FleetChecklist[]);
-      if (d.workOrders)
+      if (Array.isArray(d.checklists))
+        setChecklists(d.checklists as FleetChecklist[]);
+      if (Array.isArray(d.workOrders))
         setWorkOrders(hydrateWorkOrders(d.workOrders as WorkOrder[]));
-      if (d.spareParts)
+      if (Array.isArray(d.spareParts) && d.spareParts.length > 0)
         setSpareParts(hydrateSpareParts(d.spareParts as SparePart[]));
-      if (d.stockMovements)
+      if (Array.isArray(d.stockMovements))
         setStockMovements(d.stockMovements as StockMovement[]);
-      const next = { ...cloudConfig, lastSyncedAt: d.updatedAt };
+      const next = { ...cloudConfig, lastSyncedAt: d.updatedAt || new Date().toISOString() };
       setCloudConfig(next);
       saveCloudSyncConfig(next);
       setFirebaseStatusMsg(
-        `✅ Datos actualizados desde Firebase (subidos por ${d.updatedByRole} el ${new Date(
-          d.updatedAt
+        `✅ Datos actualizados desde Firebase (subidos por ${d.updatedByRole || 'Flota'} el ${new Date(
+          d.updatedAt || Date.now()
         ).toLocaleString('es-ES')})`
       );
     } else {
@@ -1867,11 +1914,27 @@ export function App() {
     }
 
     if (valid) {
+      if (currentRole === 'Encargado') {
+        const pinOk = await verifyManagerPin(loginPinInput);
+        if (!pinOk) {
+          const nextFails = authFailedAttempts + 1;
+          setAuthFailedAttempts(nextFails);
+          if (nextFails >= 5) {
+            setAuthLockUntil(Date.now() + 30000);
+            setAuthFailedAttempts(0);
+            setAuthError('Demasiados intentos fallidos. Bloqueado 30 segundos.');
+          } else {
+            setAuthError('PIN de Encargado incorrecto (4 dígitos).');
+          }
+          return;
+        }
+      }
       setAuthFailedAttempts(0);
       setAuthLockUntil(0);
       setIsAuthenticated(true);
       setAuthError('');
       setPasswordInput('');
+      setLoginPinInput('');
       try {
         sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
         if (rememberDevice) {
@@ -2048,6 +2111,27 @@ export function App() {
                 </option>
               </select>
             </div>
+
+            {currentRole === 'Encargado' && (
+              <div>
+                <label className="font-bold text-slate-700 block mb-1.5">
+                  PIN de Encargado (4 dígitos)
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  required
+                  value={loginPinInput}
+                  onChange={(e) => {
+                    setLoginPinInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                    if (authError) setAuthError('');
+                  }}
+                  placeholder="•••• (por defecto 1978)"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-sm font-bold text-slate-900 tracking-widest"
+                />
+              </div>
+            )}
 
             <label className="flex items-center gap-2 text-slate-600 font-medium cursor-pointer">
               <input
@@ -2773,8 +2857,19 @@ export function App() {
                 </button>
               </div>
               <p className="text-[11px] text-slate-500">
-                Pega aquí la URL de tu Web App de Google Apps Script para guardar copias de seguridad JSON en Drive.
+                Pega aquí la URL de tu Web App de Google Apps Script y tu Token Secreto para proteger Drive y el envío de correos.
               </p>
+              <input
+                type="password"
+                value={driveSecretToken}
+                onChange={(e) => {
+                  setDriveSecretToken(e.target.value);
+                  saveDriveSecretToken(e.target.value);
+                  setDriveStatusMsg('');
+                }}
+                placeholder="Token Secreto Drive/Email (debe coincidir con SECRET_TOKEN en Apps Script)"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 text-[11px] font-mono"
+              />
               <div className="flex gap-2">
                 <input
                   type="url"

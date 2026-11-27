@@ -707,12 +707,15 @@ export const PreventiveView: React.FC<PreventiveViewProps> = ({
                     type="number"
                     min={0}
                     value={newSched.intervalKm}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const intervalKm = Math.max(0, Number(e.target.value) || 0);
+                      const amb = ambulances.find((a) => a.id === newSched.ambulanceId);
                       setNewSched({
                         ...newSched,
-                        intervalKm: Math.max(0, Number(e.target.value) || 0),
-                      })
-                    }
+                        intervalKm,
+                        nextDueKm: intervalKm > 0 ? (amb?.mileage || 0) + intervalKm : 0,
+                      });
+                    }}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300"
                   />
                 </div>
@@ -724,12 +727,14 @@ export const PreventiveView: React.FC<PreventiveViewProps> = ({
                     type="number"
                     min={1}
                     value={newSched.intervalMonths}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const intervalMonths = Math.max(1, Number(e.target.value) || 1);
                       setNewSched({
                         ...newSched,
-                        intervalMonths: Math.max(1, Number(e.target.value) || 1),
-                      })
-                    }
+                        intervalMonths,
+                        nextDueDate: addMonthsLocal(today, intervalMonths),
+                      });
+                    }}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300"
                   />
                 </div>

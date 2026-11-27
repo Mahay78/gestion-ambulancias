@@ -10,6 +10,7 @@ import {
   collectAllDocumentAlerts,
   getExpiryBadgeMeta,
 } from '../utils/expiryAlerts';
+import { getLocalDateString } from '../utils/dateUtils';
 import { exportFleetCalendarIcs } from '../utils/icsExport';
 import {
   checkAndNotifyCriticalExpiries,
@@ -103,7 +104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const days30DocsCount = documentAlerts.filter((a) => a.level === 'days30').length;
 
   // Calcular alertas de mantenimiento preventivo (por km o fecha)
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const preventiveAlerts = preventiveSchedules
     .map((sched) => {
       const amb = ambulances.find((a) => a.id === sched.ambulanceId);
@@ -158,8 +159,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div
+          role="button"
+          tabIndex={0}
           onClick={() => onNavigate('fleet')}
-          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigate('fleet');
+            }
+          }}
+          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -185,8 +194,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div
+          role="button"
+          tabIndex={0}
           onClick={() => onNavigate('checklist')}
-          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigate('checklist');
+            }
+          }}
+          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -208,8 +225,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div
+          role="button"
+          tabIndex={0}
           onClick={() => onNavigate('workorders')}
-          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigate('workorders');
+            }
+          }}
+          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -233,8 +258,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div
+          role="button"
+          tabIndex={0}
           onClick={() => onNavigate('parts')}
-          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigate('parts');
+            }
+          }}
+          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <div className="flex items-center justify-between">
             <div>

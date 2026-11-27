@@ -197,6 +197,20 @@ export const FleetView: React.FC<FleetViewProps> = ({
 
     const cleanCode = newAmb.code.trim().toUpperCase();
     const cleanPlate = newAmb.plate.trim().toUpperCase();
+    const normPlate = cleanPlate.replace(/[^A-Z0-9]/g, '');
+
+    if (ambulances.some((a) => a.code.trim().toUpperCase() === cleanCode)) {
+      setAddError(`Ya existe una unidad con el código ${cleanCode}.`);
+      return;
+    }
+    if (
+      ambulances.some(
+        (a) => a.plate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') === normPlate
+      )
+    ) {
+      setAddError(`Ya existe una unidad con la matrícula ${cleanPlate}.`);
+      return;
+    }
     const createdId = onAddAmbulance({
       ...newAmb,
       code: cleanCode,

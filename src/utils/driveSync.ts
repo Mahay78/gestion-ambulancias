@@ -2,8 +2,30 @@ import { STORAGE_KEY } from './storage';
 
 const DRIVE_WEBHOOK_KEY = `${STORAGE_KEY}_gdrive_webhook_url`;
 const DRIVE_FOLDER_URL_KEY = `${STORAGE_KEY}_gdrive_root_folder_url`;
+const DRIVE_SECRET_TOKEN_KEY = `${STORAGE_KEY}_gdrive_secret_token`;
 export const DEFAULT_DRIVE_WEBHOOK_URL =
   'https://script.google.com/macros/s/AKfycbzYi-86Y8JoWRCAAqr_54iXAODd-fhoIb3BWT2NhtYwemYIpyk9Cqb-loFr9V72VledSA/exec';
+
+export const getDriveSecretToken = (): string => {
+  try {
+    return localStorage.getItem(DRIVE_SECRET_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+export const saveDriveSecretToken = (token: string): void => {
+  try {
+    const clean = token.trim();
+    if (clean) {
+      localStorage.setItem(DRIVE_SECRET_TOKEN_KEY, clean);
+    } else {
+      localStorage.removeItem(DRIVE_SECRET_TOKEN_KEY);
+    }
+  } catch {
+    // ignorar
+  }
+};
 
 export const getSavedDriveFolderUrl = (): string => {
   try {
@@ -80,6 +102,7 @@ export const uploadToGoogleDrive = async (params: {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
+        token: getDriveSecretToken(),
         fileName: params.fileName,
         mimeType: params.mimeType,
         base64: cleanBase64,
@@ -170,6 +193,7 @@ export const sendEmailViaLinkedGmail = async (params: {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
+        token: getDriveSecretToken(),
         action: 'send_email',
         to: params.to.trim(),
         subject: params.subject,
@@ -213,7 +237,7 @@ export const openGoogleDriveFolder = async (): Promise<void> => {
     const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'get_folder' }),
+      body: JSON.stringify({ token: getDriveSecretToken(), action: 'get_folder' }),
     });
     if (!res.ok) return;
     const data = (await res.json()) as { ok?: boolean; rootFolderUrl?: string };

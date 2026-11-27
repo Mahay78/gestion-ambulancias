@@ -87,7 +87,10 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
   const handlePlateInputChange = (val: string) => {
     setPlateInput(val.toUpperCase());
     const norm = normalizePlate(val);
-    const exact = platesList.find((p) => normalizePlate(p.plate) === norm);
+    const exact = platesList.find(
+      (p) =>
+        normalizePlate(p.plate) === norm || normalizePlate(p.code) === norm
+    );
     if (exact) {
       setSelectedPlateEntry(exact);
       if (!mileage) setMileage(String(exact.mileage));

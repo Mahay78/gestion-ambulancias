@@ -160,8 +160,10 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
               >
                 Google AI Studio
               </a>{' '}
-              para activar Gemini 2.5 Flash y análisis de fotos (sin tarjeta). Si lo
-              dejas vacío, funciona el motor local gratis.
+              para activar Gemini 2.5 Flash y análisis de fotos (sin tarjeta).
+              <span className="block mt-0.5 text-[10px] text-indigo-700">
+                Aviso: al usar Gemini, el resumen de la flota y tu consulta se envían a los servidores de Google. Si lo dejas vacío, todo se procesa 100 % en tu dispositivo.
+              </span>
             </p>
             <div className="flex gap-2">
               <input

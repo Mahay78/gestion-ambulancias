@@ -1,5 +1,6 @@
 import { Ambulance, PreventiveSchedule } from '../types';
 import { ensureAmbulanceDocuments } from './expiryAlerts';
+import { getLocalDateString, parseLocalDate } from './dateUtils';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
@@ -68,7 +69,7 @@ export const exportFleetCalendarIcs = (
   ambulances.forEach((amb) => {
     const docs = ensureAmbulanceDocuments(amb);
     docs.forEach((doc) => {
-      if (!doc.expiryDate) return;
+      if (!doc.expiryDate || !parseLocalDate(doc.expiryDate)) return;
       const dtStart = toIcsDate(doc.expiryDate);
       const dtEnd = addDaysIcs(doc.expiryDate, 1);
       lines.push(
@@ -97,7 +98,7 @@ export const exportFleetCalendarIcs = (
   });
 
   preventiveSchedules.forEach((ps) => {
-    if (!ps.nextDueDate) return;
+    if (!ps.nextDueDate || !parseLocalDate(ps.nextDueDate)) return;
     const amb = ambulances.find((a) => a.id === ps.ambulanceId);
     const dtStart = toIcsDate(ps.nextDueDate);
     const dtEnd = addDaysIcs(ps.nextDueDate, 1);
@@ -130,7 +131,7 @@ export const exportFleetCalendarIcs = (
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `Ambu-lzflota_Vencimientos_${new Date().toISOString().split('T')[0]}.ics`;
+  link.download = `Ambu-lzflota_Vencimientos_${getLocalDateString()}.ics`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

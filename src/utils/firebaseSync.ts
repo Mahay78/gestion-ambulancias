@@ -226,7 +226,7 @@ export const pullFleetStateFromFirebase = async (
   apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
 ): Promise<{
   ok: boolean;
-  data?: FirebaseFleetPayload;
+  data?: Partial<FirebaseFleetPayload>;
   error?: string;
 }> => {
   try {
@@ -237,21 +237,19 @@ export const pullFleetStateFromFirebase = async (
     const docsMap = new Map<string, Record<string, unknown>>();
     snap.forEach((d) => docsMap.set(d.id, d.data() as Record<string, unknown>));
 
-    if (docsMap.has('ambulances')) {
+    const hasAnyCollection = FLEET_COLLECTION_KEYS.some((k) => docsMap.has(k));
+    if (hasAnyCollection) {
       const meta = docsMap.get('meta') || {};
-      const payload: FirebaseFleetPayload = {
+      const payload: Partial<FirebaseFleetPayload> = {
         updatedAt: String(meta.updatedAt || new Date().toISOString()),
         updatedByRole: String(meta.updatedByRole || 'Encargado'),
-        ambulances: (docsMap.get('ambulances')?.items as unknown[]) || [],
-        workshops: (docsMap.get('workshops')?.items as unknown[]) || [],
-        preventiveSchedules:
-          (docsMap.get('preventiveSchedules')?.items as unknown[]) || [],
-        checklists: (docsMap.get('checklists')?.items as unknown[]) || [],
-        workOrders: (docsMap.get('workOrders')?.items as unknown[]) || [],
-        spareParts: (docsMap.get('spareParts')?.items as unknown[]) || [],
-        stockMovements:
-          (docsMap.get('stockMovements')?.items as unknown[]) || [],
       };
+      for (const key of FLEET_COLLECTION_KEYS) {
+        const docData = docsMap.get(key);
+        if (docData && Array.isArray(docData.items)) {
+          payload[key] = docData.items;
+        }
+      }
       return { ok: true, data: payload };
     }
 

@@ -51,7 +51,12 @@ export const TiresAndBatteriesPanel: React.FC<TiresAndBatteriesPanelProps> = ({
   onUpdateTires,
   onUpdateBatteries,
 }) => {
-  const currentTires = tires && tires.length === 5 ? tires : DEFAULT_TIRES;
+  const currentTires: TireStatus[] =
+    tires && tires.length > 0
+      ? DEFAULT_TIRES.map(
+          (def) => tires.find((t) => t.position === def.position) || def
+        )
+      : DEFAULT_TIRES;
   const currentBatteries = batteries || DEFAULT_BATTERIES;
 
   const handleTireChange = (

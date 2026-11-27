@@ -19,12 +19,25 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
   const [hasDrawn, setHasDrawn] = useState(Boolean(value));
 
   useEffect(() => {
-    if (!value && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (!value) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       setHasDrawn(false);
+      return;
+    }
+
+    if (value.startsWith('data:image/')) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setHasDrawn(true);
+      };
+      img.src = value;
     }
   }, [value]);
 

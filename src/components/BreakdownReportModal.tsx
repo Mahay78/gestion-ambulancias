@@ -151,12 +151,10 @@ export const BreakdownReportModal: React.FC<BreakdownReportModalProps> = ({
     ];
     const body =
       rows.length > 0
-        ? rows
-            .slice(0, 25)
-            .map(
-              (r) =>
-                `• ${r.date} | ${r.ambulanceCode} (${r.plate}) | [${r.code}] ${r.title} — ${r.workshopName} (${r.status}, ${r.daysInShop}d)`
-            )
+        ? rows.map(
+            (r) =>
+              `• ${r.date} | ${r.ambulanceCode} (${r.plate}) | [${r.code}] ${r.title} — ${r.workshopName} (${r.status}, ${r.daysInShop}d)`
+          )
         : ['• Sin roturas registradas en este periodo.'];
     return [...header, ...body].join('\n');
   };
@@ -180,7 +178,6 @@ export const BreakdownReportModal: React.FC<BreakdownReportModalProps> = ({
     const subject = `Informe de Roturas Ambu-lzflota (${fromDate} a ${toDate})`;
     const body = buildTextSummary();
     const htmlRows = rows
-      .slice(0, 30)
       .map(
         (r) =>
           `<tr><td style="padding:6px;border:1px solid #cbd5e1;">${r.date}</td><td style="padding:6px;border:1px solid #cbd5e1;"><b>${r.ambulanceCode}</b> (${r.plate})</td><td style="padding:6px;border:1px solid #cbd5e1;">${r.code}: ${r.title}</td><td style="padding:6px;border:1px solid #cbd5e1;">${r.workshopName}</td><td style="padding:6px;border:1px solid #cbd5e1;">${r.status} (${r.daysInShop}d)</td></tr>`
