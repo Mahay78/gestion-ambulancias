@@ -1,8 +1,29 @@
 import { STORAGE_KEY } from './storage';
 
 const DRIVE_WEBHOOK_KEY = `${STORAGE_KEY}_gdrive_webhook_url`;
+const DRIVE_FOLDER_URL_KEY = `${STORAGE_KEY}_gdrive_root_folder_url`;
 export const DEFAULT_DRIVE_WEBHOOK_URL =
   'https://script.google.com/macros/s/AKfycbyu3OLqb87JgoCBv_9w8Vny7mUDFgFYyi_1xva1-5soLUTGCrM9edJnMSPYZQSovlvdwg/exec';
+
+export const getSavedDriveFolderUrl = (): string => {
+  try {
+    return (
+      localStorage.getItem(DRIVE_FOLDER_URL_KEY) ||
+      'https://drive.google.com/drive/search?q=Ambu-lzflota'
+    );
+  } catch {
+    return 'https://drive.google.com/drive/search?q=Ambu-lzflota';
+  }
+};
+
+const saveDriveFolderUrl = (url?: string): void => {
+  if (!url) return;
+  try {
+    localStorage.setItem(DRIVE_FOLDER_URL_KEY, url);
+  } catch {
+    // ignorar
+  }
+};
 
 export const getDriveWebhookUrl = (): string => {
   try {
@@ -74,8 +95,12 @@ export const uploadToGoogleDrive = async (params: {
       ok?: boolean;
       fileUrl?: string;
       fileId?: string;
+      rootFolderUrl?: string;
       error?: string;
     };
+    if (data.rootFolderUrl) {
+      saveDriveFolderUrl(data.rootFolderUrl);
+    }
     if (data.ok) {
       return { ok: true, fileUrl: data.fileUrl, fileId: data.fileId };
     }
@@ -128,4 +153,77 @@ export const uploadDataUrlToUnitFolder = (
     base64Content: dataUrl,
     subfolder: unitFolderName,
   });
+};
+
+export const sendEmailViaLinkedGmail = async (params: {
+  to: string;
+  subject: string;
+  body: string;
+  htmlBody?: string;
+}): Promise<{ ok: boolean; sentFrom?: string; error?: string }> => {
+  const webhookUrl = getDriveWebhookUrl();
+  if (!webhookUrl) {
+    return { ok: false, error: 'No hay URL de Google Apps Script configurada.' };
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'send_email',
+        to: params.to.trim(),
+        subject: params.subject,
+        body: params.body,
+        htmlBody: params.htmlBody,
+      }),
+    });
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status} al enviar correo.` };
+    }
+    const data = (await res.json()) as {
+      ok?: boolean;
+      sentFrom?: string;
+      rootFolderUrl?: string;
+      error?: string;
+    };
+    if (data.rootFolderUrl) {
+      saveDriveFolderUrl(data.rootFolderUrl);
+    }
+    if (data.ok) {
+      return { ok: true, sentFrom: data.sentFrom || 'flotaambulz@gmail.com' };
+    }
+    return { ok: false, error: data.error || 'Error enviando el correo desde Apps Script.' };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Error de red al conectar con flotaambulz@gmail.com.',
+    };
+  }
+};
+
+export const openGoogleDriveFolder = async (): Promise<void> => {
+  const cached = getSavedDriveFolderUrl();
+  const win = window.open(cached, '_blank', 'noopener,noreferrer');
+  const webhookUrl = getDriveWebhookUrl();
+  if (!webhookUrl) return;
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'get_folder' }),
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { ok?: boolean; rootFolderUrl?: string };
+    if (data.ok && data.rootFolderUrl) {
+      saveDriveFolderUrl(data.rootFolderUrl);
+      if (win && data.rootFolderUrl !== cached) {
+        win.location.href = data.rootFolderUrl;
+      }
+    }
+  } catch {
+    // ignorar
+  }
 };

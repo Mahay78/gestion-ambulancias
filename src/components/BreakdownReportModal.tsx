@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Ambulance, ExternalWorkshop, FleetChecklist, WorkOrder } from '../types';
 import { getLocalDateString } from '../utils/dateUtils';
 import { getSavedBossEmail, saveBossEmail } from '../utils/storage';
+import { sendEmailViaLinkedGmail } from '../utils/driveSync';
 import {
   BreakdownReportRow,
   printBreakdownsManagementReport,
@@ -39,6 +40,8 @@ export const BreakdownReportModal: React.FC<BreakdownReportModalProps> = ({
 
   const [bossEmail, setBossEmail] = useState(() => getSavedBossEmail());
   const [emailSaved, setEmailSaved] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSendStatus, setEmailSendStatus] = useState('');
   const [fromDate, setFromDate] = useState(thirtyDaysAgo);
   const [toDate, setToDate] = useState(today);
   const [selectedAmbId, setSelectedAmbId] = useState<string>('Todas');
@@ -162,6 +165,45 @@ export const BreakdownReportModal: React.FC<BreakdownReportModalProps> = ({
     saveBossEmail(bossEmail);
     setEmailSaved(true);
     setTimeout(() => setEmailSaved(false), 2500);
+  };
+
+  const handleSendDirectGmail = async () => {
+    const cleanTo = bossEmail.trim();
+    if (!cleanTo) {
+      setEmailSendStatus('⚠️ Introduce primero el correo electrónico de tu jefe.');
+      return;
+    }
+    saveBossEmail(cleanTo);
+    setIsSendingEmail(true);
+    setEmailSendStatus('Enviando correo desde flotaambulz@gmail.com...');
+
+    const subject = `Informe de Roturas Ambu-lzflota (${fromDate} a ${toDate})`;
+    const body = buildTextSummary();
+    const htmlRows = rows
+      .slice(0, 30)
+      .map(
+        (r) =>
+          `<tr><td style="padding:6px;border:1px solid #cbd5e1;">${r.date}</td><td style="padding:6px;border:1px solid #cbd5e1;"><b>${r.ambulanceCode}</b> (${r.plate})</td><td style="padding:6px;border:1px solid #cbd5e1;">${r.code}: ${r.title}</td><td style="padding:6px;border:1px solid #cbd5e1;">${r.workshopName}</td><td style="padding:6px;border:1px solid #cbd5e1;">${r.status} (${r.daysInShop}d)</td></tr>`
+      )
+      .join('');
+    const htmlBody = `<div style="font-family:sans-serif;color:#0f172a;"><h2>Informe de Roturas — Ambu-lzflota</h2><p><b>Periodo:</b> ${fromDate} a ${toDate} | <b>Filtro:</b> ${selectedAmbLabel}</p><p><b>Resumen:</b> ${rows.length} roturas | ${totalUnitsAffected} unidades afectadas | ${openCount} abiertas | ${totalDaysInShop} días en taller</p><table style="border-collapse:collapse;width:100%;font-size:12px;"><thead><tr style="background:#0f172a;color:#fff;"><th style="padding:6px;">Fecha</th><th style="padding:6px;">Unidad</th><th style="padding:6px;">Rotura</th><th style="padding:6px;">Taller</th><th style="padding:6px;">Estado</th></tr></thead><tbody>${htmlRows}</tbody></table></div>`;
+
+    const res = await sendEmailViaLinkedGmail({
+      to: cleanTo,
+      subject,
+      body,
+      htmlBody,
+    });
+    setIsSendingEmail(false);
+    if (res.ok) {
+      setEmailSendStatus(
+        `✅ Correo enviado correctamente desde ${res.sentFrom || 'flotaambulz@gmail.com'} a ${cleanTo}.`
+      );
+    } else {
+      setEmailSendStatus(
+        `⚠️ ${res.error} (Si acabas de actualizar el script, recuerda crear una Nueva versión en Implementar -> Gestionar implementaciones).`
+      );
+    }
   };
 
   const handleSendMailto = () => {
@@ -355,42 +397,58 @@ export const BreakdownReportModal: React.FC<BreakdownReportModalProps> = ({
         </div>
 
         {/* Acciones de exportación y envío */}
-        <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-end gap-2 text-xs">
-          <button
-            type="button"
-            onClick={() =>
-              printBreakdownsManagementReport({
-                fromDate,
-                toDate,
-                ambulanceLabel: selectedAmbLabel,
-                bossEmail: bossEmail.trim(),
-                rows,
-                totalUnitsAffected,
-                totalDaysInShop,
-                openCount,
-              })
-            }
-            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold flex items-center gap-1.5"
-          >
-            <Printer className="w-4 h-4" />
-            Generar PDF / Imprimir
-          </button>
-          <button
-            type="button"
-            onClick={handleSendMailto}
-            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5"
-          >
-            <Mail className="w-4 h-4" />
-            Enviar por Email
-          </button>
-          <button
-            type="button"
-            onClick={handleSendWhatsApp}
-            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5"
-          >
-            <MessageCircle className="w-4 h-4" />
-            WhatsApp
-          </button>
+        <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 space-y-2 text-xs">
+          {emailSendStatus && (
+            <p className="text-[11px] font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2">
+              {emailSendStatus}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                printBreakdownsManagementReport({
+                  fromDate,
+                  toDate,
+                  ambulanceLabel: selectedAmbLabel,
+                  bossEmail: bossEmail.trim(),
+                  rows,
+                  totalUnitsAffected,
+                  totalDaysInShop,
+                  openCount,
+                })
+              }
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold flex items-center gap-1.5"
+            >
+              <Printer className="w-4 h-4" />
+              PDF / Imprimir
+            </button>
+            <button
+              type="button"
+              disabled={isSendingEmail}
+              onClick={handleSendDirectGmail}
+              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5"
+            >
+              <Mail className="w-4 h-4" />
+              {isSendingEmail ? 'Enviando...' : 'Enviar Directo (flotaambulz)'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSendMailto}
+              className="px-3 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold flex items-center gap-1.5"
+              title="Abrir tu aplicación de correo local"
+            >
+              App Correo
+            </button>
+            <button
+              type="button"
+              onClick={handleSendWhatsApp}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5"
+            >
+              <MessageCircle className="w-4 h-4" />
+              WhatsApp
+            </button>
+          </div>
         </div>
       </div>
     </div>

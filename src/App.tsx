@@ -75,6 +75,7 @@ import {
   getDriveWebhookUrl,
   saveDriveWebhookUrl,
   uploadDataUrlToUnitFolder,
+  openGoogleDriveFolder,
 } from './utils/driveSync';
 import {
   LayoutDashboard,
@@ -104,6 +105,7 @@ import {
   Menu,
   Sparkles,
   FileText,
+  FolderOpen,
 } from 'lucide-react';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { BreakdownReportModal } from './components/BreakdownReportModal';
@@ -2107,6 +2109,14 @@ export function App() {
           </button>
           <button
             type="button"
+            onClick={() => openGoogleDriveFolder()}
+            className="w-full py-2 px-2.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border border-emerald-800/80 font-bold text-[11px] flex items-center justify-center gap-1.5"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
+            Abrir Google Drive
+          </button>
+          <button
+            type="button"
             onClick={() => {
               const link = `${window.location.origin}${window.location.pathname}?modo=parte`;
               navigator.clipboard?.writeText(link);
@@ -2678,10 +2688,20 @@ export function App() {
 
             {/* Copia y archivo en Google Drive (flotaambulz@gmail.com - 15 GB gratis) */}
             <div className="pt-3 border-t border-slate-200 space-y-2 text-xs">
-              <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                <HardDrive className="w-4 h-4 text-emerald-600" />
-                Google Drive (flotaambulz@gmail.com — 15 GB)
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <HardDrive className="w-4 h-4 text-emerald-600" />
+                  Google Drive (flotaambulz@gmail.com — 15 GB)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => openGoogleDriveFolder()}
+                  className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-1"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  Abrir Carpeta Drive ↗
+                </button>
+              </div>
               <p className="text-[11px] text-slate-500">
                 Pega aquí la URL de tu Web App de Google Apps Script para guardar copias de seguridad JSON en Drive.
               </p>
