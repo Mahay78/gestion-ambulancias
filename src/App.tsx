@@ -2484,13 +2484,79 @@ export function App() {
                 );
               })}
             </nav>
+
+            <div className="p-3 border-t border-slate-800 space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDarkMode((v) => !v)}
+                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 border ${
+                    darkMode
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-800 text-slate-200 border-slate-700'
+                  }`}
+                >
+                  {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  {darkMode ? 'Modo Día' : 'Nocturno'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLargeText((v) => !v)}
+                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 border ${
+                    largeText
+                      ? 'bg-blue-600 text-white border-blue-400'
+                      : 'bg-slate-800 text-slate-200 border-slate-700'
+                  }`}
+                >
+                  <Type className="w-4 h-4" />
+                  {largeText ? 'Texto Normal' : 'Texto Grande'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSidebarOpen(false);
+                    setShowBackupModal(true);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center gap-1.5"
+                >
+                  <Download className="w-4 h-4" />
+                  Backup ({storageStats.usagePercent}%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSidebarOpen(false);
+                    setShowHelpModal(true);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 font-bold flex items-center justify-center gap-1.5"
+                >
+                  <HelpCircle className="w-4 h-4 text-emerald-400" />
+                  Ayuda / RGPD
+                </button>
+              </div>
+              {currentRole === 'Encargado' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileSidebarOpen(false);
+                    setShowAuditLog(true);
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 font-bold flex items-center justify-center gap-1.5"
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Auditoría ({auditLogs.length})
+                </button>
+              )}
+            </div>
           </aside>
         </div>
       )}
 
       {/* Top Navbar adaptada a Móvil, Tablet y Escritorio */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 safe-top shadow-md">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
@@ -2526,9 +2592,9 @@ export function App() {
               type="button"
               onClick={() => setShowGlobalSearch(true)}
               title="Búsqueda global en toda la flota"
-              className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+              className="w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition"
             >
-              <Search className="w-3.5 h-3.5 text-blue-400" />
+              <Search className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-blue-400" />
               <span className="hidden md:inline">Buscar</span>
             </button>
             {(() => {
@@ -2544,9 +2610,9 @@ export function App() {
                   type="button"
                   onClick={() => setShowAlertCenter(true)}
                   title="Centro único de alertas"
-                  className="relative p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition"
+                  className="relative h-9 px-2.5 sm:h-auto sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition"
                 >
-                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  <Bell className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-400" />
                   <span className="hidden xl:inline">Alertas</span>
                   {totalAlerts > 0 && (
                     <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black leading-none">
@@ -2560,7 +2626,7 @@ export function App() {
               type="button"
               onClick={() => setDarkMode((v) => !v)}
               title={darkMode ? 'Desactivar modo oscuro' : 'Activar modo oscuro nocturno'}
-              className={`p-2 rounded-xl text-xs font-semibold border transition ${
+              className={`hidden md:flex p-2 rounded-xl text-xs font-semibold border transition ${
                 darkMode
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
@@ -2572,7 +2638,7 @@ export function App() {
               type="button"
               onClick={() => setLargeText((v) => !v)}
               title={largeText ? 'Tamaño de texto normal' : 'Aumentar tamaño de texto'}
-              className={`p-2 rounded-xl text-xs font-semibold border transition ${
+              className={`hidden md:flex p-2 rounded-xl text-xs font-semibold border transition ${
                 largeText
                   ? 'bg-blue-600 text-white border-blue-400'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
@@ -2584,7 +2650,7 @@ export function App() {
               type="button"
               onClick={() => setShowHelpModal(true)}
               title="Guía rápida, ayuda y privacidad (RGPD)"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+              className="hidden md:flex p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
             >
               <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
             </button>
@@ -2652,7 +2718,7 @@ export function App() {
             <button
               type="button"
               onClick={() => setShowBackupModal(true)}
-              className={`px-3 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/15 shadow-sm transition ${
+              className={`hidden sm:flex px-3 py-1.5 rounded-xl text-white text-xs font-bold items-center gap-1.5 ring-1 ring-white/15 shadow-sm transition ${
                 storageStats.isWarning || quotaAlert
                   ? 'bg-amber-600 hover:bg-amber-500'
                   : 'bg-blue-600 hover:bg-blue-500'
@@ -2668,9 +2734,9 @@ export function App() {
               type="button"
               onClick={handleLogout}
               title="Bloquear aplicación / Cerrar sesión"
-              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-100 text-xs font-semibold flex items-center gap-1.5 border border-rose-700/80 shadow-sm transition"
+              className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-1.5 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-100 text-xs font-semibold flex items-center justify-center gap-1.5 border border-rose-700/80 shadow-sm transition"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
               <span className="hidden lg:inline">Salir</span>
             </button>
           </div>
@@ -2678,7 +2744,7 @@ export function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 flex-1 space-y-4">
+      <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 pb-24 sm:py-6 lg:pb-8 flex-1 space-y-4 overflow-x-hidden">
         {/* Aviso automático de límite de almacenamiento local */}
         {(storageStats.isWarning || quotaAlert) && (
           <div
@@ -3228,14 +3294,81 @@ export function App() {
           </div>
         </div>
       )}
+      {/* Barra de navegación inferior fija para móvil y tablet (< lg) */}
+      <nav
+        aria-label="Navegación móvil"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 safe-bottom shadow-[0_-4px_20px_rgba(0,0,0,0.25)] print:hidden"
+      >
+        <div className="grid grid-cols-5 items-center max-w-md mx-auto">
+          {[
+            {
+              id: 'dashboard' as ActiveTab,
+              label: 'Panel',
+              icon: <LayoutDashboard className="w-5 h-5" />,
+            },
+            {
+              id: 'pizarra' as ActiveTab,
+              label: 'Pizarra',
+              icon: <LayoutGrid className="w-5 h-5" />,
+            },
+            {
+              id: 'fleet' as ActiveTab,
+              label: 'Flota',
+              icon: <Truck className="w-5 h-5" />,
+            },
+            {
+              id: 'checklist' as ActiveTab,
+              label: 'Checklist',
+              icon: <ClipboardCheck className="w-5 h-5" />,
+            },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`py-2 px-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition ${
+                  isActive
+                    ? 'text-blue-400'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <div
+                  className={`p-1.5 rounded-xl transition ${
+                    isActive ? 'bg-blue-600/20 text-blue-400' : ''
+                  }`}
+                >
+                  {tab.icon}
+                </div>
+                <span className="truncate max-w-full">{tab.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="py-2 px-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-slate-400 hover:text-slate-200 transition"
+          >
+            <div className="p-1.5 rounded-xl">
+              <Menu className="w-5 h-5" />
+            </div>
+            <span>Más</span>
+          </button>
+        </div>
+      </nav>
+
       {/* Botón flotante global de Asistente IA */}
       <button
         type="button"
         onClick={() => setShowAiModal(true)}
         title="Abrir Asistente IA de Flota (Gratis)"
-        className="fixed bottom-5 right-5 z-40 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-extrabold flex items-center gap-2 shadow-xl shadow-indigo-950/30 ring-2 ring-white/30"
+        className="fixed bottom-20 right-4 lg:bottom-5 lg:right-5 z-40 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-xl shadow-indigo-950/30 ring-2 ring-white/30 print:hidden"
       >
-        <Sparkles className="w-4 h-4" />
+        <Sparkles className="w-5 h-5 sm:w-4 sm:h-4" />
         <span className="hidden sm:inline">Asistente IA</span>
       </button>
 
