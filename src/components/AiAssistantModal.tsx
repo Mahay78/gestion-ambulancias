@@ -15,6 +15,8 @@ import {
   KeyRound,
   Bot,
   Trash2,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 interface AiAssistantModalProps {
@@ -34,6 +36,9 @@ const QUICK_PROMPTS = [
   'Resumen de la flota hoy',
   '¿Qué documentos vencen pronto?',
   '¿Qué órdenes externas hay abiertas?',
+  'Ranking de talleres',
+  'Garantías vigentes',
+  'Neumáticos y baterías críticos',
   '¿Qué repuestos están bajo mínimos?',
 ];
 
@@ -55,6 +60,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   const [showKeyConfig, setShowKeyConfig] = useState(false);
   const [geminiKey, setGeminiKey] = useState(() => getSavedGeminiFreeKey());
   const [keySavedMsg, setKeySavedMsg] = useState('');
+  const [copiedId, setCopiedId] = useState<string>('');
 
   const handleSend = async (promptText?: string) => {
     const q = (promptText ?? input).trim();
@@ -75,7 +81,8 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
     const res = await askFleetAiAssistant(
       userMsg.text,
       fleetContext,
-      imgToSend || undefined
+      imgToSend || undefined,
+      messages.map((m) => ({ role: m.role, text: m.text }))
     );
 
     setMessages((prev) => [
@@ -215,11 +222,29 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
                 }`}
               >
                 {m.role === 'assistant' && (
-                  <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-600">
-                    <Bot className="w-3 h-3" />
-                    {m.provider === 'gemini-free'
-                      ? 'Gemini Gratis'
-                      : 'IA Local Gratis'}
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-indigo-600">
+                    <span className="flex items-center gap-1">
+                      <Bot className="w-3 h-3" />
+                      {m.provider === 'gemini-free'
+                        ? 'Gemini Gratis'
+                        : 'IA Local Gratis'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(m.text);
+                        setCopiedId(m.id);
+                        setTimeout(() => setCopiedId(''), 1800);
+                      }}
+                      title="Copiar respuesta"
+                      className="text-slate-400 hover:text-slate-700 flex items-center gap-0.5"
+                    >
+                      {copiedId === m.id ? (
+                        <Check className="w-3 h-3 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
                   </div>
                 )}
                 {m.image && (

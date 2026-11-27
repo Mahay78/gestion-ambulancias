@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { collectAllDocumentAlerts } from './expiryAlerts';
 import { getLocalDateString } from './dateUtils';
+import { detectActiveWarranties } from './warrantyDetector';
 import { STORAGE_KEY } from './storage';
 
 const AI_API_KEY_STORAGE = `${STORAGE_KEY}_gemini_free_key`;
@@ -182,8 +183,75 @@ export const answerFleetQuestionLocally = (
     return `📦 **Resumen de Almacén y Dotación:**\n${lowLines}\n\n🚑 **Unidades con dotación a bordo incompleta:** ${missingUnits.length > 0 ? missingUnits.map((a) => a.code).join(', ') : 'Ninguna'}`;
   }
 
-  // 4. Talleres / Órdenes / Días parado
-  if (/taller|orden|reparaci[oó]n|parado|aver[ií]a|garant[ií]a/.test(q)) {
+  // 4. Garantías vigentes
+  if (/garant[ií]a/.test(q)) {
+    const activeWarranties = ctx.ambulances.flatMap((amb) =>
+      detectActiveWarranties(
+        amb.id,
+        amb.mileage,
+        ctx.workOrders,
+        ctx.workshops
+      ).map((w) => ({ amb, w }))
+    );
+    if (activeWarranties.length === 0) {
+      return 'ℹ️ No se detectan reparaciones recientes con garantía vigente en la flota.';
+    }
+    const lines = activeWarranties.slice(0, 8).map(
+      ({ amb, w }) =>
+        `• **${amb.code}** (${amb.plate}) — ${w.workOrder.code} en *${
+          w.workshop?.name || 'Taller'
+        }*: ${w.warrantyText} (${w.daysRemaining} días restantes)`
+    );
+    return `🛡️ **Garantías Vigentes (${activeWarranties.length}):**\n${lines.join('\n')}`;
+  }
+
+  // 5. Neumáticos, baterías y carrocería
+  if (/neum[aá]tic|rueda|bater[ií]a|carrocer[ií]a|golpe|roce|da[ñn]o/.test(q)) {
+    const critTires = ctx.ambulances.filter((a) =>
+      (a.tires || []).some((t) => t.treadDepthMm < 3)
+    );
+    const lowBatts = ctx.ambulances.filter(
+      (a) =>
+        a.batteries &&
+        (a.batteries.starterStatus !== 'OK' || a.batteries.auxStatus !== 'OK')
+    );
+    const damaged = ctx.ambulances.filter((a) =>
+      (a.bodyDamages || []).some((d) => !d.repaired)
+    );
+    return [
+      `🔍 **Estado Visual, Neumáticos y Baterías:**`,
+      `• **Neumáticos críticos (<3mm):** ${critTires.length > 0 ? critTires.map((a) => a.code).join(', ') : 'Ninguno'}`,
+      `• **Baterías bajas/críticas:** ${lowBatts.length > 0 ? lowBatts.map((a) => a.code).join(', ') : 'Ninguna'}`,
+      `• **Unidades con daños activos en carrocería:** ${damaged.length > 0 ? damaged.map((a) => `${a.code} (${(a.bodyDamages || []).filter((d) => !d.repaired).length})`).join(', ') : 'Ninguna'}`,
+    ].join('\n');
+  }
+
+  // 6. Ranking / Estadísticas de Talleres / Órdenes / Días parado
+  if (/taller|orden|reparaci[oó]n|parado|aver[ií]a|ranking|tarda/.test(q)) {
+    if (/tarda|ranking|estad[ií]stic|mejor/.test(q)) {
+      const wsStats = ctx.workshops.map((ws) => {
+        const orders = ctx.workOrders.filter((w) => w.workshopId === ws.id);
+        const daysList = orders.map((wo) => {
+          const start = new Date(`${wo.entryDate || wo.createdAt}T00:00:00`);
+          const end = wo.exitDate
+            ? new Date(`${wo.exitDate}T00:00:00`)
+            : new Date(`${today}T00:00:00`);
+          return Math.max(
+            0,
+            Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24))
+          );
+        });
+        const avg =
+          daysList.length > 0
+            ? (daysList.reduce((a, b) => a + b, 0) / daysList.length).toFixed(1)
+            : '0.0';
+        return { name: ws.name, count: orders.length, avg };
+      });
+      return `🏭 **Comparativa de Talleres Externos:**\n${wsStats
+        .map((s) => `• **${s.name}**: ${s.count} órdenes • Media ${s.avg} días parado`)
+        .join('\n')}`;
+    }
+
     const openOrders = ctx.workOrders.filter((w) => w.status !== 'Cerrada');
     if (openOrders.length === 0) {
       return '✅ No hay órdenes de reparación externas abiertas ahora mismo.';
@@ -254,7 +322,8 @@ export const answerFleetQuestionLocally = (
 export const askFleetAiAssistant = async (
   question: string,
   ctx: FleetContextData,
-  imageBase64DataUrl?: string
+  imageBase64DataUrl?: string,
+  history?: { role: 'user' | 'assistant'; text: string }[]
 ): Promise<{ text: string; provider: 'gemini-free' | 'local-free' }> => {
   const apiKey = getSavedGeminiFreeKey();
   if (!apiKey) {
@@ -290,8 +359,17 @@ Datos actuales:
 - Stock bajo: ${lowStock.join('; ') || 'Ninguno'}
 - Talleres: ${ctx.workshops.map((w) => `${w.name}(${w.specialty})`).join('; ')}`;
 
+    const recentHistory = (history || [])
+      .slice(-4)
+      .map((h) => `${h.role === 'user' ? 'Usuario' : 'Asistente'}: ${h.text}`)
+      .join('\n');
+
     const parts: Record<string, unknown>[] = [
-      { text: `${systemContext}\n\nPregunta del usuario: ${question}` },
+      {
+        text: `${systemContext}${
+          recentHistory ? `\n\nConversación reciente:\n${recentHistory}` : ''
+        }\n\nPregunta del usuario: ${question}`,
+      },
     ];
 
     if (imageBase64DataUrl && imageBase64DataUrl.startsWith('data:image/')) {
