@@ -2,9 +2,11 @@ import React, { useMemo, useState } from 'react';
 import {
   Ambulance,
   BoardTask,
+  ExternalWorkshop,
   FleetChecklist,
   PreventiveSchedule,
   WorkOrder,
+  WorkOrderPriority,
 } from '../types';
 import { collectAllDocumentAlerts } from '../utils/expiryAlerts';
 import { getLocalDateString } from '../utils/dateUtils';
@@ -43,6 +45,8 @@ export interface PizarraTodoItem {
   title: string;
   detail: string;
   targetTab: 'fleet' | 'preventive' | 'checklist' | 'workorders';
+  checklistId?: string;
+  checklistItemId?: string;
 }
 
 export const collectUnitTodos = (
@@ -96,8 +100,11 @@ export const collectUnitTodos = (
       const isDotacionReport =
         chk.generalObservations.includes('[DOTACIÓN UNIDAD') ||
         (chk.missingParts && chk.missingParts.length > 0);
+      const sentSet = new Set(chk.sentItemIds || []);
       const faultItems = chk.items.filter(
-        (i) => i.status === 'Avería' || i.status === 'Observación'
+        (i) =>
+          (i.status === 'Avería' || i.status === 'Observación') &&
+          !sentSet.has(i.id)
       );
 
       if (faultItems.length > 0) {
@@ -115,9 +122,11 @@ export const collectUnitTodos = (
             title: `${item.status === 'Avería' ? 'Avería' : 'Observación'}: ${item.label}`,
             detail: `${item.comment ? `${item.comment} • ` : ''}Parte del ${chk.date} por ${chk.inspectorName}`,
             targetTab: 'checklist',
+            checklistId: chk.id,
+            checklistItemId: item.id,
           });
         });
-      } else {
+      } else if ((chk.sentItemIds || []).length === 0) {
         todos.push({
           id: `chk-${chk.id}`,
           category: isDotacionReport ? 'Dotación' : 'Checklist / Parte',
@@ -130,6 +139,7 @@ export const collectUnitTodos = (
             'Incidencia pendiente de asignar a taller',
           detail: `Parte del ${chk.date} por ${chk.inspectorName}`,
           targetTab: 'checklist',
+          checklistId: chk.id,
         });
       }
     });
@@ -273,12 +283,19 @@ interface PizarraViewProps {
   workOrders: WorkOrder[];
   checklists: FleetChecklist[];
   preventiveSchedules: PreventiveSchedule[];
+  workshops?: ExternalWorkshop[];
   onNavigateToUnitTab: (
     tab: 'fleet' | 'preventive' | 'checklist' | 'workorders',
     ambulanceId: string
   ) => void;
   onUpdateBoardTasks: (ambulanceId: string, tasks: BoardTask[]) => void;
   onRestockFromPizarra?: (ambulanceId: string, partId: string) => void;
+  onSendSelectedBreakdownsToWorkOrder?: (
+    ambulanceId: string,
+    workshopId: string,
+    selectedTodos: PizarraTodoItem[],
+    priority: WorkOrderPriority
+  ) => void;
 }
 
 export const PizarraView: React.FC<PizarraViewProps> = ({
@@ -286,9 +303,11 @@ export const PizarraView: React.FC<PizarraViewProps> = ({
   workOrders,
   checklists,
   preventiveSchedules,
+  workshops = [],
   onNavigateToUnitTab,
   onUpdateBoardTasks,
   onRestockFromPizarra,
+  onSendSelectedBreakdownsToWorkOrder,
 }) => {
   const today = getLocalDateString();
   const [selectedAmbId, setSelectedAmbId] = useState<string>(
@@ -298,6 +317,14 @@ export const PizarraView: React.FC<PizarraViewProps> = ({
     'Todas' | 'Con pendientes' | 'Al día' | 'En taller'
   >('Todas');
   const [newTaskText, setNewTaskText] = useState('');
+  const [selectedBreakdownIds, setSelectedBreakdownIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [targetWorkshopId, setTargetWorkshopId] = useState<string>(
+    workshops[0]?.id || ''
+  );
+  const [woPriority, setWoPriority] = useState<WorkOrderPriority>('Alta');
+  const [sentWoNotice, setSentWoNotice] = useState<string>('');
 
   const unitSummaries = useMemo(() => {
     return ambulances.map((amb) => {
@@ -541,6 +568,115 @@ export const PizarraView: React.FC<PizarraViewProps> = ({
                   Cosas por hacer detectadas automáticamente ({activeUnit.autoTodos.length})
                 </h4>
 
+                {sentWoNotice && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold text-xs">{sentWoNotice}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSentWoNotice('');
+                        onNavigateToUnitTab('workorders', activeUnit.amb.id);
+                      }}
+                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold"
+                    >
+                      Ver en Órdenes Externas →
+                    </button>
+                  </div>
+                )}
+
+                {(() => {
+                  const selectableBreakdowns = activeUnit.autoTodos.filter(
+                    (t) => Boolean(t.checklistId)
+                  );
+                  if (
+                    !onSendSelectedBreakdownsToWorkOrder ||
+                    selectableBreakdowns.length === 0
+                  ) {
+                    return null;
+                  }
+                  const chosen = selectableBreakdowns.filter(
+                    (t) => selectedBreakdownIds[t.id]
+                  );
+                  const allChecked =
+                    chosen.length === selectableBreakdowns.length;
+
+                  return (
+                    <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-extrabold text-blue-900 flex items-center gap-1.5">
+                          <Wrench className="w-3.5 h-3.5 text-blue-600" />
+                          Enviar averías seleccionadas a Orden Externa ({chosen.length}/{selectableBreakdowns.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = { ...selectedBreakdownIds };
+                            selectableBreakdowns.forEach((t) => {
+                              next[t.id] = !allChecked;
+                            });
+                            setSelectedBreakdownIds(next);
+                          }}
+                          className="text-[11px] font-bold text-blue-700 hover:underline"
+                        >
+                          {allChecked ? 'Desmarcar todas' : 'Seleccionar todas'}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          value={targetWorkshopId || workshops[0]?.id || ''}
+                          onChange={(e) => setTargetWorkshopId(e.target.value)}
+                          className="flex-1 min-w-[160px] px-2.5 py-1.5 rounded-lg border border-blue-200 bg-white text-xs font-semibold text-slate-800"
+                        >
+                          {workshops.map((ws) => (
+                            <option key={ws.id} value={ws.id}>
+                              {ws.name} ({ws.specialty})
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={woPriority}
+                          onChange={(e) =>
+                            setWoPriority(e.target.value as WorkOrderPriority)
+                          }
+                          className="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-white text-xs font-semibold text-slate-800"
+                        >
+                          <option value="Baja">Baja</option>
+                          <option value="Media">Media</option>
+                          <option value="Alta">Alta</option>
+                          <option value="Crítica (Urgente)">Crítica (Urgente)</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={chosen.length === 0}
+                          onClick={() => {
+                            const wsId =
+                              targetWorkshopId || workshops[0]?.id || '';
+                            onSendSelectedBreakdownsToWorkOrder(
+                              activeUnit.amb.id,
+                              wsId,
+                              chosen,
+                              woPriority
+                            );
+                            const next = { ...selectedBreakdownIds };
+                            chosen.forEach((t) => {
+                              delete next[t.id];
+                            });
+                            setSelectedBreakdownIds(next);
+                            setSentWoNotice(
+                              `✅ Creada Orden Externa con ${chosen.length} avería(s) para ${activeUnit.amb.code}.`
+                            );
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-45 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          Mandar a Taller ({chosen.length})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {activeUnit.autoTodos.length === 0 ? (
                   <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold flex items-center gap-2">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -548,11 +684,29 @@ export const PizarraView: React.FC<PizarraViewProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {activeUnit.autoTodos.map((item) => (
+                    {activeUnit.autoTodos.map((item) => {
+                      const isSelectable =
+                        Boolean(onSendSelectedBreakdownsToWorkOrder) &&
+                        Boolean(item.checklistId);
+                      const isChecked = Boolean(selectedBreakdownIds[item.id]);
+                      return (
                       <div
                         key={item.id}
+                        onClick={
+                          isSelectable
+                            ? () =>
+                                setSelectedBreakdownIds((prev) => ({
+                                  ...prev,
+                                  [item.id]: !prev[item.id],
+                                }))
+                            : undefined
+                        }
                         className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
-                          item.urgency === 'critical'
+                          isSelectable ? 'cursor-pointer' : ''
+                        } ${
+                          isChecked
+                            ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-300'
+                            : item.urgency === 'critical'
                             ? 'bg-rose-50 border-rose-200'
                             : item.urgency === 'warning'
                             ? 'bg-amber-50/70 border-amber-200'
@@ -560,6 +714,20 @@ export const PizarraView: React.FC<PizarraViewProps> = ({
                         }`}
                       >
                         <div className="flex items-start gap-2.5 min-w-0">
+                          {isSelectable && (
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() =>
+                                setSelectedBreakdownIds((prev) => ({
+                                  ...prev,
+                                  [item.id]: !prev[item.id],
+                                }))
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-1 w-4 h-4 rounded border-slate-300 text-blue-600 shrink-0"
+                            />
+                          )}
                           <div className="mt-0.5 shrink-0">
                             {item.urgency === 'critical' ? (
                               <AlertTriangle className="w-4 h-4 text-rose-600" />
@@ -612,7 +780,8 @@ export const PizarraView: React.FC<PizarraViewProps> = ({
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

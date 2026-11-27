@@ -177,7 +177,7 @@ import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { AlertCenterModal, buildUnifiedAlerts } from './components/AlertCenterModal';
 import { AuditLogModal } from './components/AuditLogModal';
 import { HelpAndOnboardingModal } from './components/HelpAndOnboardingModal';
-import { PizarraView, collectUnitTodos } from './components/PizarraView';
+import { PizarraView, PizarraTodoItem, collectUnitTodos } from './components/PizarraView';
 
 type ActiveTab =
   | 'dashboard'
@@ -1264,6 +1264,79 @@ export function App() {
             }
           : a
       )
+    );
+  };
+
+  const handleSendSelectedBreakdownsToWorkOrder = (
+    ambulanceId: string,
+    workshopId: string,
+    selectedTodos: PizarraTodoItem[],
+    priority: WorkOrder['priority']
+  ) => {
+    if (selectedTodos.length === 0) return;
+    const amb = ambulances.find((a) => a.id === ambulanceId);
+    const today = getLocalDateString();
+    const firstChecklistId = selectedTodos[0].checklistId;
+    const sourcePhotos = checklists
+      .filter((c) => selectedTodos.some((t) => t.checklistId === c.id))
+      .flatMap((c) => c.photos || []);
+
+    const titles = selectedTodos.map((t) => t.title.replace(/^(Avería|Observación):\s*/i, ''));
+    const newWo: WorkOrder = {
+      id: `wo-${Date.now()}`,
+      code: getNextWorkOrderCode(workOrders),
+      ambulanceId,
+      workshopId: workshopId || workshops[0]?.id || 'ws-1',
+      type: 'Incidencia / Checklist',
+      priority,
+      status: 'Asignada',
+      title:
+        titles.length === 1
+          ? titles[0]
+          : `${titles[0]} (+${titles.length - 1} más)`,
+      description: selectedTodos
+        .map((t, i) => `${i + 1}. ${t.title}${t.detail ? ` (${t.detail})` : ''}`)
+        .join('\n'),
+      reportedBy: `${currentRole} de Flota (Pizarra)`,
+      createdAt: today,
+      entryDate: today,
+      mileageAtEntry: amb?.mileage || 0,
+      partsUsed: [],
+      workshopReport: '',
+      warranty: 'Pendiente de confirmar por taller',
+      sourceChecklistId: firstChecklistId,
+      photos: sourcePhotos,
+    };
+
+    setWorkOrders((prev) => [newWo, ...prev]);
+
+    setChecklists((prev) =>
+      prev.map((chk) => {
+        const matchedForChk = selectedTodos.filter(
+          (t) => t.checklistId === chk.id
+        );
+        if (matchedForChk.length === 0) return chk;
+        const newlySentIds = matchedForChk
+          .map((t) => t.checklistItemId)
+          .filter((id): id is string => Boolean(id));
+        const mergedSentIds = Array.from(
+          new Set([...(chk.sentItemIds || []), ...newlySentIds])
+        );
+        const allFaults = chk.items.filter(
+          (i) => i.status === 'Avería' || i.status === 'Observación'
+        );
+        const allSent =
+          allFaults.length === 0 ||
+          allFaults.every((i) => mergedSentIds.includes(i.id));
+        return {
+          ...chk,
+          sentItemIds: mergedSentIds,
+          workshopStatus: allSent
+            ? 'Orden Externa Creada'
+            : chk.workshopStatus,
+          linkedWorkOrderId: newWo.id,
+        };
+      })
     );
   };
 
@@ -3232,6 +3305,7 @@ export function App() {
             workOrders={workOrders}
             checklists={checklists}
             preventiveSchedules={preventiveSchedules}
+            workshops={workshops}
             onNavigateToUnitTab={(tab, ambId) => {
               setQrSelectedAmbId(ambId);
               if (
@@ -3245,6 +3319,9 @@ export function App() {
             }}
             onUpdateBoardTasks={handleUpdateBoardTasks}
             onRestockFromPizarra={handleRestockVehiclePart}
+            onSendSelectedBreakdownsToWorkOrder={
+              handleSendSelectedBreakdownsToWorkOrder
+            }
           />
         )}
 

@@ -169,6 +169,7 @@ export interface FleetChecklist {
     | 'Archivada / OK'
     | 'Cerrada / Resuelta';
   linkedWorkOrderId?: string;
+  sentItemIds?: string[];
   photos?: string[];
   inspectorSignature?: string;
   closedAt?: string;
