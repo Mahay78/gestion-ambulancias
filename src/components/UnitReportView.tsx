@@ -191,8 +191,20 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
     };
 
     setIsSending(true);
-    const res = await submitUnitBreakdownReport(report, projectId, apiKey);
-    setIsSending(false);
+    let res: { ok: boolean; error?: string };
+    try {
+      res = await submitUnitBreakdownReport(report, projectId, apiKey);
+    } catch (err) {
+      res = {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : 'Error inesperado al enviar el parte.',
+      };
+    } finally {
+      setIsSending(false);
+    }
 
     if (res.ok) {
       if (photos.length > 0) {

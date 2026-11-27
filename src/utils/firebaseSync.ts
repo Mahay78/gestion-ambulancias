@@ -91,6 +91,7 @@ export const getFirebaseServices = (
   let db: Firestore;
   try {
     db = initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
       localCache: persistentLocalCache({
         tabManager: persistentMultipleTabManager(),
       }),
@@ -389,32 +390,118 @@ export const fetchPublicPlates = async (
   }
 };
 
+const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`TIMEOUT:${label}`)), ms);
+    promise.then(
+      (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+
+const toFirestoreRestValue = (val: unknown): Record<string, unknown> => {
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'number') {
+    return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  }
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (Array.isArray(val)) {
+    return { arrayValue: { values: val.map((v) => toFirestoreRestValue(v)) } };
+  }
+  return { stringValue: String(val ?? '') };
+};
+
+const submitUnitReportViaRest = async (
+  reportId: string,
+  sanitized: Record<string, unknown>,
+  projectId: string,
+  apiKey: string
+): Promise<void> => {
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(sanitized)) {
+    fields[k] = toFirestoreRestValue(v);
+  }
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/(default)/documents/ambufleet_unit_reports/${encodeURIComponent(
+    reportId
+  )}?key=${encodeURIComponent(apiKey)}`;
+
+  const res = await withTimeout(
+    fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    }),
+    10000,
+    'rest'
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} Firestore REST: ${text || res.statusText}`);
+  }
+};
+
 export const submitUnitBreakdownReport = async (
   report: Omit<UnitBreakdownReport, 'status'>,
   projectId = DEFAULT_FIREBASE_CONFIG.projectId,
   apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
 ): Promise<{ ok: boolean; error?: string }> => {
+  const sanitized = Object.fromEntries(
+    Object.entries({ ...report, status: 'pending' }).filter(
+      ([, v]) => v !== undefined
+    )
+  );
+
   try {
     const { db } = getFirebaseServices(projectId, apiKey);
-    await ensureFirebaseAuthSession(projectId, apiKey);
-    const sanitized = Object.fromEntries(
-      Object.entries({ ...report, status: 'pending' }).filter(
-        ([, v]) => v !== undefined
-      )
+    await withTimeout(
+      ensureFirebaseAuthSession(projectId, apiKey),
+      4000,
+      'auth'
+    ).catch(() => undefined);
+
+    await withTimeout(
+      setDoc(doc(db, 'ambufleet_unit_reports', report.id), sanitized),
+      8000,
+      'setDoc'
     );
-    await setDoc(doc(db, 'ambufleet_unit_reports', report.id), sanitized);
     return { ok: true };
   } catch (err) {
-    const rawMsg =
-      err instanceof Error
-        ? err.message
-        : 'No se pudo enviar el parte a Firebase.';
-    const friendly =
-      rawMsg.includes('permission') || rawMsg.includes('PERMISSION_DENIED')
-        ? 'Permiso denegado en Firestore. Verifica las reglas de ambufleet_unit_reports en Firebase Console.'
-        : rawMsg.includes('exceeds') || rawMsg.includes('too large')
-        ? 'Las fotos pesan demasiado para un único envío. Prueba con menos fotos.'
-        : rawMsg;
+    const rawMsg = err instanceof Error ? err.message : '';
+    const isPermission =
+      rawMsg.includes('permission') || rawMsg.includes('PERMISSION_DENIED');
+    const isTooLarge =
+      rawMsg.includes('exceeds') || rawMsg.includes('too large');
+
+    if (!isPermission && !isTooLarge) {
+      try {
+        await submitUnitReportViaRest(report.id, sanitized, projectId, apiKey);
+        return { ok: true };
+      } catch (restErr) {
+        const restMsg =
+          restErr instanceof Error
+            ? restErr.message
+            : 'No se pudo enviar el parte a Firebase.';
+        return {
+          ok: false,
+          error:
+            restMsg.includes('TIMEOUT')
+              ? 'Tiempo de espera agotado al conectar con Firebase. Revisa tu conexión a internet.'
+              : restMsg,
+        };
+      }
+    }
+
+    const friendly = isPermission
+      ? 'Permiso denegado en Firestore. Verifica las reglas de ambufleet_unit_reports en Firebase Console.'
+      : 'Las fotos pesan demasiado para un único envío. Prueba con menos fotos.';
     return {
       ok: false,
       error: friendly,
