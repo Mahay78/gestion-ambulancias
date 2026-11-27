@@ -449,6 +449,7 @@ export function App() {
                   rep.plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
               );
 
+            const isDotacion = rep.reportType === 'dotacion';
             incoming.push({
               id: rep.id,
               ambulanceId: matchedAmb?.id || ambulances[0]?.id || 'amb-1',
@@ -459,14 +460,29 @@ export function App() {
               items: [
                 {
                   id: `unit-item-${rep.id}`,
-                  section: 'Motor y Niveles',
-                  label: `Avería reportada desde unidad (${rep.plate})`,
+                  section: isDotacion
+                    ? 'Célula Sanitaria y Camilla'
+                    : 'Motor y Niveles',
+                  label: isDotacion
+                    ? `Problema de dotación reportado (${rep.plate})`
+                    : `Avería reportada desde unidad (${rep.plate})`,
                   status: 'Avería',
                   comment: rep.description,
                 },
               ],
-              missingParts: [],
-              generalObservations: `[PARTE UNIDAD • ${rep.plate}] ${rep.description}`,
+              missingParts: isDotacion
+                ? [
+                    {
+                      partId: `unit-dot-${rep.id}`,
+                      partName: rep.description,
+                      missingQty: 1,
+                      actionRequired: 'Reponer en vehículo',
+                    },
+                  ]
+                : [],
+              generalObservations: isDotacion
+                ? `[DOTACIÓN UNIDAD • ${rep.plate}] ${rep.description}`
+                : `[PARTE UNIDAD • ${rep.plate}] ${rep.description}`,
               workshopStatus: 'Pendiente de Asignar Taller',
               photos: rep.photos || [],
             });

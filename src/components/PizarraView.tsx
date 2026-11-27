@@ -91,9 +91,12 @@ export const collectUnitTodos = (
         c.workshopStatus === 'Pendiente de Asignar Taller'
     )
     .forEach((chk) => {
+      const isDotacionReport =
+        chk.generalObservations.includes('[DOTACIÓN UNIDAD') ||
+        (chk.missingParts && chk.missingParts.length > 0);
       todos.push({
         id: `chk-${chk.id}`,
-        category: 'Checklist / Parte',
+        category: isDotacionReport ? 'Dotación' : 'Checklist / Parte',
         urgency:
           chk.overallUrgency === 'Inmovilización Inmediata'
             ? 'critical'
@@ -142,10 +145,12 @@ export const collectUnitTodos = (
       }
     });
 
-  // 5. Dotación a bordo incompleta (FALTA)
+  // 5. Dotación a bordo incompleta (FALTA) y reportes de dotación en checklists activos
+  const onboardMissingIds = new Set<string>();
   amb.onboardParts
     .filter((p) => p.currentQty < p.requiredQty || p.status === 'Falta')
     .forEach((p) => {
+      onboardMissingIds.add(p.partId);
       todos.push({
         id: `part-${p.partId}`,
         category: 'Dotación',
@@ -153,6 +158,31 @@ export const collectUnitTodos = (
         title: `Falta dotación: ${p.partName}`,
         detail: `A bordo: ${p.currentQty} / Requeridas: ${p.requiredQty}`,
         targetTab: 'fleet',
+      });
+    });
+
+  checklists
+    .filter(
+      (c) =>
+        c.ambulanceId === amb.id &&
+        c.workshopStatus !== 'Archivada / OK' &&
+        c.missingParts &&
+        c.missingParts.length > 0
+    )
+    .forEach((chk) => {
+      chk.missingParts.forEach((mp, idx) => {
+        if (onboardMissingIds.has(mp.partId)) return;
+        if (chk.workshopStatus === 'Pendiente de Asignar Taller' && chk.generalObservations.includes('[DOTACIÓN UNIDAD')) {
+          return;
+        }
+        todos.push({
+          id: `chk-dot-${chk.id}-${idx}`,
+          category: 'Dotación',
+          urgency: 'warning',
+          title: `Dotación reportada (${chk.date}): ${mp.partName}`,
+          detail: `Faltan ${mp.missingQty} uds. • ${mp.actionRequired}`,
+          targetTab: 'fleet',
+        });
       });
     });
 

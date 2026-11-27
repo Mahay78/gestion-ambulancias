@@ -54,6 +54,7 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
     useState<PublicPlateEntry | null>(null);
   const [reporterName, setReporterName] = useState('');
   const [mileage, setMileage] = useState<string>('');
+  const [reportType, setReportType] = useState<'averia' | 'dotacion'>('averia');
   const [urgency, setUrgency] =
     useState<UnitBreakdownReport['urgency']>('Prioritaria');
   const [description, setDescription] = useState('');
@@ -154,6 +155,7 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
       plate: selectedPlateEntry?.plate || cleanPlate,
       reporterName: reporterName.trim(),
       mileage: finalKm,
+      reportType,
       urgency,
       description: description.trim(),
       photos,
@@ -194,6 +196,7 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
     setPlateInput('');
     setSelectedPlateEntry(null);
     setMileage('');
+    setReportType('averia');
     setUrgency('Prioritaria');
     setDescription('');
     setPhotos([]);
@@ -332,6 +335,36 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
                   placeholder="Ej. 142500"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 font-semibold"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1.5">
+                ¿Qué quieres comunicar?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReportType('averia')}
+                  className={`py-2 px-3 rounded-xl font-bold border text-xs transition ${
+                    reportType === 'averia'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  🔧 Avería Vehículo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportType('dotacion')}
+                  className={`py-2 px-3 rounded-xl font-bold border text-xs transition ${
+                    reportType === 'dotacion'
+                      ? 'bg-orange-600 text-white border-orange-700'
+                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  📦 Problema Dotación
+                </button>
               </div>
             </div>
 

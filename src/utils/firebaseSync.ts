@@ -346,6 +346,7 @@ export interface UnitBreakdownReport {
   plate: string;
   reporterName: string;
   mileage: number;
+  reportType?: 'averia' | 'dotacion';
   urgency: 'Normal' | 'Prioritaria' | 'Inmovilización Inmediata';
   description: string;
   photos: string[];
