@@ -16,6 +16,7 @@ import {
   calculateDaysRemaining,
   getExpiryBadgeMeta,
 } from '../utils/expiryAlerts';
+import { addMonthsLocal, getLocalDateString } from '../utils/dateUtils';
 import { compressImageFile } from '../utils/imageCompression';
 import {
   Plus,
@@ -161,9 +162,15 @@ export const FleetView: React.FC<FleetViewProps> = ({
     ambulances.find((a) => a.id === selectedAmbId) || filteredAmbulances[0] || ambulances[0];
 
   const handleOpenAddModal = () => {
+    const maxNum = ambulances.reduce((max, amb) => {
+      const m = amb.code.match(/(\d+)$/);
+      const n = m ? parseInt(m[1], 10) : 0;
+      return n > max ? n : max;
+    }, 0);
+    const nextCode = `AMB-${String(maxNum + 1).padStart(2, '0')}`;
     setNewAmb({
       ...newAmb,
-      code: `AMB-0${ambulances.length + 1}`,
+      code: nextCode,
       plate: '',
     });
     setShowAddModal(true);
@@ -174,7 +181,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
     if (!newAmb.plate.trim()) return;
     onAddAmbulance({
       ...newAmb,
-      lastServiceDate: new Date().toISOString().split('T')[0],
+      lastServiceDate: getLocalDateString(),
       lastServiceMileage: newAmb.mileage,
       onboardParts: [
         {
@@ -220,11 +227,21 @@ export const FleetView: React.FC<FleetViewProps> = ({
   const handleMileageSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAmb) return;
-    const km = Number(mileageInput);
-    if (!isNaN(km) && km >= 0) {
-      onUpdateMileage(selectedAmb.id, km);
-      setMileageInput('');
+    const raw = mileageInput.trim();
+    if (!raw) return;
+    const km = Number(raw);
+    if (!Number.isInteger(km) || km < 0) {
+      alert('Introduce un kilometraje entero válido.');
+      return;
     }
+    if (km < selectedAmb.mileage) {
+      const confirmed = window.confirm(
+        `El kilometraje introducido (${km.toLocaleString()} km) es menor que el actual (${selectedAmb.mileage.toLocaleString()} km). ¿Confirmas que deseas corregirlo a la baja?`
+      );
+      if (!confirmed) return;
+    }
+    onUpdateMileage(selectedAmb.id, km);
+    setMileageInput('');
   };
 
   const handleAddOnboardPartSubmit = (e: React.FormEvent) => {
@@ -626,13 +643,11 @@ export const FleetView: React.FC<FleetViewProps> = ({
                       };
 
                       const handleQuickRenew = () => {
-                        const todayStr = new Date().toISOString().split('T')[0];
-                        const base =
-                          diffDays < 0 ? new Date() : new Date(`${doc.expiryDate}T00:00:00`);
-                        base.setMonth(base.getMonth() + renewMonths);
+                        const todayStr = getLocalDateString();
+                        const baseDateStr = diffDays < 0 ? todayStr : doc.expiryDate;
                         updateDocField({
                           issueDate: todayStr,
-                          expiryDate: base.toISOString().split('T')[0],
+                          expiryDate: addMonthsLocal(baseDateStr, renewMonths),
                         });
                       };
 
@@ -993,7 +1008,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
                         type="number"
                         min={1}
                         value={newOnboardReqQty}
-                        onChange={(e) => setNewOnboardReqQty(Number(e.target.value))}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setNewOnboardReqQty(isNaN(val) ? 1 : Math.max(1, val));
+                        }}
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-bold"
                       />
                     </div>
@@ -1006,7 +1024,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
                         type="number"
                         min={0}
                         value={newOnboardCurQty}
-                        onChange={(e) => setNewOnboardCurQty(Number(e.target.value))}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setNewOnboardCurQty(isNaN(val) ? 0 : Math.max(0, val));
+                        }}
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-bold"
                       />
                     </div>
@@ -1357,8 +1378,12 @@ export const FleetView: React.FC<FleetViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-600">
-              Esta acción dará de baja la ambulancia de la flota activa junto con su
-              programación preventiva asociada.
+              Esta acción dará de baja la ambulancia de la flota activa y{' '}
+              <strong className="text-rose-700">
+                eliminará también en cascada sus checklists, órdenes de reparación y
+                mantenimientos preventivos asociados
+              </strong>
+              .
             </p>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 text-xs">

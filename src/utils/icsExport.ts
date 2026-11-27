@@ -17,9 +17,33 @@ const addDaysIcs = (dateStr: string, days: number): string => {
 const escapeIcsText = (text: string): string => {
   return text
     .replace(/\\/g, '\\\\')
-    .replace(/\n/g, '\\n')
+    .replace(/\r\n|\r|\n/g, '\\n')
     .replace(/,/g, '\\,')
     .replace(/;/g, '\\;');
+};
+
+/**
+ * Plegado de líneas RFC 5545 a 75 octetos UTF-8 (CRLF + espacio).
+ */
+const foldIcsLine = (line: string): string => {
+  const encoder = new TextEncoder();
+  if (encoder.encode(line).length <= 75) return line;
+  const out: string[] = [];
+  let current = '';
+  for (const ch of line) {
+    const candidate = current + ch;
+    const limit = out.length === 0 ? 75 : 74;
+    if (encoder.encode(candidate).length > limit) {
+      out.push(out.length === 0 ? current : ` ${current}`);
+      current = ch;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) {
+    out.push(out.length === 0 ? current : ` ${current}`);
+  }
+  return out.join('\r\n');
 };
 
 /**
@@ -100,7 +124,7 @@ export const exportFleetCalendarIcs = (
 
   lines.push('END:VCALENDAR');
 
-  const blob = new Blob([lines.join('\r\n')], {
+  const blob = new Blob([lines.map(foldIcsLine).join('\r\n')], {
     type: 'text/calendar;charset=utf-8',
   });
   const url = URL.createObjectURL(blob);

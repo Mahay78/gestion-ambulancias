@@ -43,6 +43,7 @@ import {
 } from './utils/storage';
 import {
   DEFAULT_FIREBASE_CONFIG,
+  FleetCollectionKey,
   pushFleetStateToFirebase,
   pullFleetStateFromFirebase,
   subscribeFleetRealtime,
@@ -50,6 +51,7 @@ import {
   signInFirebaseWithEmail,
   signOutFirebase,
 } from './utils/firebaseSync';
+import { addMonthsLocal, getLocalDateString } from './utils/dateUtils';
 import {
   verifyLocalAccessPassword,
   verifyManagerPin,
@@ -110,24 +112,11 @@ const normalizeWorkOrderStatus = (st: string): WorkOrderStatus => {
 };
 
 const hydrateAmbulancesWithFullFleet = (saved: Ambulance[]): Ambulance[] => {
-  const byId = new Map<string, Ambulance>();
-  saved.forEach((a) =>
-    byId.set(a.id, {
-      ...a,
-      status: normalizeAmbulanceStatus(a.status),
-      documents: ensureAmbulanceDocuments(a),
-    })
-  );
-  INITIAL_AMBULANCES.forEach((initAmb) => {
-    if (!byId.has(initAmb.id) && saved.length <= 5) {
-      byId.set(initAmb.id, {
-        ...initAmb,
-        status: normalizeAmbulanceStatus(initAmb.status),
-        documents: ensureAmbulanceDocuments(initAmb),
-      });
-    }
-  });
-  return Array.from(byId.values());
+  return saved.map((a) => ({
+    ...a,
+    status: normalizeAmbulanceStatus(a.status),
+    documents: ensureAmbulanceDocuments(a),
+  }));
 };
 
 const hydrateWorkOrders = (saved: WorkOrder[]): WorkOrder[] => {
@@ -144,6 +133,7 @@ const hydrateWorkOrders = (saved: WorkOrder[]): WorkOrder[] => {
       partName: p.partName,
       sku: p.sku,
       quantity: p.quantity,
+      deductedFromStock: p.deductedFromStock,
     })),
   }));
 };
@@ -165,12 +155,15 @@ const hydrateSpareParts = (saved: SparePart[]): SparePart[] => {
 };
 
 const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
+  const currentYear = new Date().getFullYear();
+  const yearPrefix = `OR-${currentYear}-`;
   const maxNum = existingOrders.reduce((max, wo) => {
+    if (!wo.code.startsWith(yearPrefix)) return max;
     const match = wo.code.match(/(\d+)$/);
     const num = match ? parseInt(match[1], 10) : 0;
     return num > max ? num : max;
   }, 0);
-  return `OR-2026-${String(maxNum + 1).padStart(3, '0')}`;
+  return `${yearPrefix}${String(maxNum + 1).padStart(3, '0')}`;
 };
 
 const AUTH_SESSION_KEY = `${STORAGE_KEY}_authenticated`;
@@ -215,6 +208,20 @@ export function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const isApplyingRemoteRef = useRef<boolean>(false);
   const hasHydratedRef = useRef<boolean>(false);
+  const dirtyKeysRef = useRef<Set<FleetCollectionKey>>(new Set());
+  const prevSyncSnapshotRef = useRef<{
+    ambulances: Ambulance[];
+    workshops: ExternalWorkshop[];
+    preventiveSchedules: PreventiveSchedule[];
+    checklists: FleetChecklist[];
+    workOrders: WorkOrder[];
+    spareParts: SparePart[];
+    stockMovements: StockMovement[];
+  } | null>(null);
+  const [authFailedAttempts, setAuthFailedAttempts] = useState<number>(0);
+  const [authLockUntil, setAuthLockUntil] = useState<number>(0);
+  const [pinFailedAttempts, setPinFailedAttempts] = useState<number>(0);
+  const [pinLockUntil, setPinLockUntil] = useState<number>(0);
 
   const [ambulances, setAmbulances] = useState<Ambulance[]>(() =>
     hydrateAmbulancesWithFullFleet(
@@ -273,22 +280,27 @@ export function App() {
   // Deep link desde etiquetas QR (?amb=AMB-01)
   useEffect(() => {
     if (!isAuthenticated) return;
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const ambCode = params.get('amb');
-      if (ambCode) {
-        const found = ambulances.find(
-          (a) => a.code.toLowerCase() === ambCode.trim().toLowerCase()
-        );
-        if (found) {
-          setQrSelectedAmbId(found.id);
-          setActiveTab('fleet');
+    const applyQrParam = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const ambCode = params.get('amb');
+        if (ambCode) {
+          const found = ambulances.find(
+            (a) => a.code.toLowerCase() === ambCode.trim().toLowerCase()
+          );
+          if (found) {
+            setQrSelectedAmbId(found.id);
+            setActiveTab('fleet');
+          }
         }
+      } catch {
+        // ignorar
       }
-    } catch {
-      // ignorar
-    }
-  }, [isAuthenticated]);
+    };
+    applyQrParam();
+    window.addEventListener('popstate', applyQrParam);
+    return () => window.removeEventListener('popstate', applyQrParam);
+  }, [isAuthenticated, ambulances]);
 
   // Notificación diaria PWA si existen vencimientos críticos (<=15d, <=7d o vencidos)
   useEffect(() => {
@@ -296,7 +308,7 @@ export function App() {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       checkAndNotifyCriticalExpiries(ambulances, false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, ambulances]);
 
   // Suscripción en tiempo real a Firestore (onSnapshot)
   useEffect(() => {
@@ -347,9 +359,9 @@ export function App() {
           setFirebaseStatusMsg(
             `🔄 Cambio remoto sincronizado (${new Date(updatedAt).toLocaleTimeString('es-ES')})`
           );
-          setTimeout(() => {
+          queueMicrotask(() => {
             isApplyingRemoteRef.current = false;
-          }, 300);
+          });
         },
         (err) => {
           setRealtimeLive(false);
@@ -369,16 +381,66 @@ export function App() {
     };
   }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline]);
 
-  // Auto-push con debounce a Firebase cuando hay cambios locales
+  // Auto-push con debounce a Firebase solo para colecciones modificadas
   useEffect(() => {
+    if (!prevSyncSnapshotRef.current) {
+      prevSyncSnapshotRef.current = {
+        ambulances,
+        workshops,
+        preventiveSchedules,
+        checklists,
+        workOrders,
+        spareParts,
+        stockMovements,
+      };
+    }
+
     if (!isAuthenticated || !cloudConfig.enabled || !isOnline) return;
     if (!hasHydratedRef.current) {
       hasHydratedRef.current = true;
       return;
     }
-    if (isApplyingRemoteRef.current) return;
+
+    const prevSnap = prevSyncSnapshotRef.current;
+    if (isApplyingRemoteRef.current) {
+      prevSyncSnapshotRef.current = {
+        ambulances,
+        workshops,
+        preventiveSchedules,
+        checklists,
+        workOrders,
+        spareParts,
+        stockMovements,
+      };
+      return;
+    }
+
+    if (prevSnap.ambulances !== ambulances) dirtyKeysRef.current.add('ambulances');
+    if (prevSnap.workshops !== workshops) dirtyKeysRef.current.add('workshops');
+    if (prevSnap.preventiveSchedules !== preventiveSchedules)
+      dirtyKeysRef.current.add('preventiveSchedules');
+    if (prevSnap.checklists !== checklists) dirtyKeysRef.current.add('checklists');
+    if (prevSnap.workOrders !== workOrders) dirtyKeysRef.current.add('workOrders');
+    if (prevSnap.spareParts !== spareParts) dirtyKeysRef.current.add('spareParts');
+    if (prevSnap.stockMovements !== stockMovements)
+      dirtyKeysRef.current.add('stockMovements');
+
+    prevSyncSnapshotRef.current = {
+      ambulances,
+      workshops,
+      preventiveSchedules,
+      checklists,
+      workOrders,
+      spareParts,
+      stockMovements,
+    };
+
+    if (dirtyKeysRef.current.size === 0) return;
 
     const timer = setTimeout(() => {
+      const keysToPush = Array.from(dirtyKeysRef.current);
+      if (keysToPush.length === 0) return;
+      dirtyKeysRef.current.clear();
       const nowIso = new Date().toISOString();
       pushFleetStateToFirebase(
         {
@@ -393,7 +455,8 @@ export function App() {
           stockMovements,
         },
         cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
-        cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey
+        cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey,
+        keysToPush
       ).then((res) => {
         if (res.ok) {
           setRealtimeLive(true);
@@ -614,7 +677,34 @@ export function App() {
     currentQty: number
   ) => {
     const partInfo = spareParts.find((sp) => sp.id === partId);
-    if (!partInfo) return;
+    const amb = ambulances.find((a) => a.id === ambulanceId);
+    if (!partInfo || !amb) return;
+
+    const safeReq = Math.max(1, Math.floor(requiredQty));
+    const safeCur = Math.max(0, Math.floor(currentQty));
+
+    if (safeCur > 0) {
+      if (partInfo.stockQuantity < safeCur) {
+        alert(
+          `Stock insuficiente en almacén para "${partInfo.name}". Disponible: ${partInfo.stockQuantity} uds.`
+        );
+        return;
+      }
+      recordStockMovement(
+        partInfo,
+        'Salida a vehículo',
+        -safeCur,
+        `${amb.code} (${amb.plate}) • Dotación a bordo`,
+        `${currentRole} de Flota`
+      );
+      setSpareParts((prev) =>
+        prev.map((sp) =>
+          sp.id === partId
+            ? { ...sp, stockQuantity: Math.max(0, sp.stockQuantity - safeCur) }
+            : sp
+        )
+      );
+    }
 
     setAmbulances((prev) =>
       prev.map((a) => {
@@ -627,8 +717,8 @@ export function App() {
               p.partId === partId
                 ? {
                     ...p,
-                    requiredQty: p.requiredQty + requiredQty,
-                    currentQty: p.currentQty + currentQty,
+                    requiredQty: p.requiredQty + safeReq,
+                    currentQty: p.currentQty + safeCur,
                   }
                 : p
             ),
@@ -641,8 +731,8 @@ export function App() {
             {
               partId: partInfo.id,
               partName: partInfo.name,
-              requiredQty,
-              currentQty,
+              requiredQty: safeReq,
+              currentQty: safeCur,
             },
           ],
         };
@@ -735,10 +825,8 @@ export function App() {
     if (!sched) return;
     const amb = ambulances.find((a) => a.id === sched.ambulanceId);
     const currentKm = amb?.mileage || sched.lastDoneKm || 100000;
-    const today = new Date().toISOString().split('T')[0];
-
-    const nextDate = new Date();
-    nextDate.setMonth(nextDate.getMonth() + (sched.intervalMonths || 6));
+    const today = getLocalDateString();
+    const nextDueDate = addMonthsLocal(today, sched.intervalMonths || 6);
 
     setPreventiveSchedules((prev) =>
       prev.map((s) =>
@@ -748,7 +836,7 @@ export function App() {
               lastDoneKm: currentKm,
               nextDueKm: s.intervalKm ? currentKm + s.intervalKm : undefined,
               lastDoneDate: today,
-              nextDueDate: nextDate.toISOString().split('T')[0],
+              nextDueDate,
             }
           : s
       )
@@ -1008,6 +1096,7 @@ export function App() {
                   partName: part.name,
                   sku: part.sku,
                   quantity,
+                  deductedFromStock: true,
                 },
               ],
             }
@@ -1024,7 +1113,7 @@ export function App() {
 
     const part = spareParts.find((p) => p.id === removedEntry.partId);
     const amb = ambulances.find((a) => a.id === wo.ambulanceId);
-    if (part) {
+    if (part && removedEntry.deductedFromStock === true) {
       recordStockMovement(
         part,
         'Ajuste',
@@ -1119,21 +1208,28 @@ export function App() {
     notes?: string
   ) => {
     const part = spareParts.find((p) => p.id === partId);
-    if (part) {
-      recordStockMovement(
-        part,
-        'Ajuste',
-        delta,
-        `Almacén (${part.warehouseLocation})`,
-        `${currentRole} de Flota`,
-        notes || 'Ajuste de inventario en almacén'
+    if (!part) return;
+    if (delta < 0 && part.stockQuantity < Math.abs(delta)) {
+      alert(
+        `No hay stock suficiente para restar ${Math.abs(delta)} uds. de "${part.name}" (Stock actual: ${part.stockQuantity}).`
       );
+      return;
     }
+    const nextQty = Math.max(0, part.stockQuantity + delta);
+    const actualDelta = nextQty - part.stockQuantity;
+    if (actualDelta === 0) return;
+
+    recordStockMovement(
+      part,
+      'Ajuste',
+      actualDelta,
+      `Almacén (${part.warehouseLocation})`,
+      `${currentRole} de Flota`,
+      notes || 'Ajuste de inventario en almacén'
+    );
     setSpareParts((prev) =>
       prev.map((p) =>
-        p.id === partId
-          ? { ...p, stockQuantity: Math.max(0, p.stockQuantity + delta) }
-          : p
+        p.id === partId ? { ...p, stockQuantity: nextQty } : p
       )
     );
   };
@@ -1225,15 +1321,48 @@ export function App() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string);
-        if (data.ambulances)
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+          throw new Error('Estructura inválida');
+        }
+        const hasValidSection =
+          Array.isArray(data.ambulances) ||
+          Array.isArray(data.workshops) ||
+          Array.isArray(data.workOrders) ||
+          Array.isArray(data.spareParts);
+        if (!hasValidSection) {
+          throw new Error('Sin secciones válidas');
+        }
+
+        const confirmed = window.confirm(
+          '¿Seguro que deseas restaurar esta copia de seguridad? Se guardará una copia automática del estado actual antes de sobrescribir.'
+        );
+        if (!confirmed) return;
+
+        saveAutoBackupSnapshot(
+          {
+            ambulances,
+            workshops,
+            preventiveSchedules,
+            checklists,
+            workOrders,
+            spareParts,
+            stockMovements,
+          },
+          'Pre-importación manual JSON'
+        );
+
+        if (Array.isArray(data.ambulances))
           setAmbulances(hydrateAmbulancesWithFullFleet(data.ambulances));
-        if (data.workshops) setWorkshops(data.workshops);
-        if (data.preventiveSchedules)
+        if (Array.isArray(data.workshops)) setWorkshops(data.workshops);
+        if (Array.isArray(data.preventiveSchedules))
           setPreventiveSchedules(data.preventiveSchedules);
-        if (data.checklists) setChecklists(data.checklists);
-        if (data.workOrders) setWorkOrders(hydrateWorkOrders(data.workOrders));
-        if (data.spareParts) setSpareParts(hydrateSpareParts(data.spareParts));
-        if (data.stockMovements) setStockMovements(data.stockMovements);
+        if (Array.isArray(data.checklists)) setChecklists(data.checklists);
+        if (Array.isArray(data.workOrders))
+          setWorkOrders(hydrateWorkOrders(data.workOrders));
+        if (Array.isArray(data.spareParts))
+          setSpareParts(hydrateSpareParts(data.spareParts));
+        if (Array.isArray(data.stockMovements))
+          setStockMovements(data.stockMovements);
         setShowBackupModal(false);
       } catch {
         alert('El archivo seleccionado no es una copia de seguridad válida.');
@@ -1431,6 +1560,13 @@ export function App() {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const now = Date.now();
+    if (authLockUntil > now) {
+      const secs = Math.ceil((authLockUntil - now) / 1000);
+      setAuthError(`Demasiados intentos fallidos. Espera ${secs}s.`);
+      return;
+    }
+
     let valid = false;
     if (useFirebaseEmailLogin && firebaseEmail.trim()) {
       const res = await signInFirebaseWithEmail(
@@ -1442,6 +1578,12 @@ export function App() {
       if (res.ok) {
         valid = true;
       } else {
+        const nextFails = authFailedAttempts + 1;
+        setAuthFailedAttempts(nextFails);
+        if (nextFails >= 5) {
+          setAuthLockUntil(Date.now() + 30000);
+          setAuthFailedAttempts(0);
+        }
         setAuthError(res.error || 'Error de autenticación en Firebase.');
         return;
       }
@@ -1456,6 +1598,8 @@ export function App() {
     }
 
     if (valid) {
+      setAuthFailedAttempts(0);
+      setAuthLockUntil(0);
       setIsAuthenticated(true);
       setAuthError('');
       setPasswordInput('');
@@ -1468,7 +1612,15 @@ export function App() {
         // Ignorar errores de storage
       }
     } else {
-      setAuthError('Contraseña incorrecta. Verifica mayúsculas y números.');
+      const nextFails = authFailedAttempts + 1;
+      setAuthFailedAttempts(nextFails);
+      if (nextFails >= 5) {
+        setAuthLockUntil(Date.now() + 30000);
+        setAuthFailedAttempts(0);
+        setAuthError('Demasiados intentos fallidos. Bloqueado 30 segundos.');
+      } else {
+        setAuthError('Contraseña incorrecta. Verifica mayúsculas y números.');
+      }
     }
   };
 
@@ -2263,14 +2415,30 @@ export function App() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                const now = Date.now();
+                if (pinLockUntil > now) {
+                  const secs = Math.ceil((pinLockUntil - now) / 1000);
+                  setPinError(`Demasiados intentos. Espera ${secs}s.`);
+                  return;
+                }
                 const valid = await verifyManagerPin(pinInput);
                 if (valid) {
+                  setPinFailedAttempts(0);
+                  setPinLockUntil(0);
                   setCurrentRole('Encargado');
                   setShowPinModal(false);
                   setPinInput('');
                   setPinError('');
                 } else {
-                  setPinError('PIN incorrecto. Debe tener 4 dígitos válidos.');
+                  const nextFails = pinFailedAttempts + 1;
+                  setPinFailedAttempts(nextFails);
+                  if (nextFails >= 5) {
+                    setPinLockUntil(Date.now() + 30000);
+                    setPinFailedAttempts(0);
+                    setPinError('PIN bloqueado 30 segundos por seguridad.');
+                  } else {
+                    setPinError('PIN incorrecto. Debe tener 4 dígitos válidos.');
+                  }
                 }
               }}
               className="space-y-3 text-xs"

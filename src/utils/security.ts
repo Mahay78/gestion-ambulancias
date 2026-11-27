@@ -1,9 +1,6 @@
 import { STORAGE_KEY } from './storage';
 
 const MANAGER_PIN_HASH_KEY = `${STORAGE_KEY}_manager_pin_hash`;
-// Hash SHA-256 de "mahay1978" (no se almacena la contraseña en texto plano)
-const ACCESS_PASSWORD_SHA256 =
-  '2f8a1e72c8a2c8a2c8a2c8a2c8a2c8a2'; // Se calcula dinámicamente abajo si no coincide
 
 export const sha256Hex = async (text: string): Promise<string> => {
   const data = new TextEncoder().encode(text);

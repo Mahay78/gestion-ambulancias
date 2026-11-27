@@ -1,4 +1,5 @@
 import { Ambulance, DocumentType, VehicleDocument } from '../types';
+import { addMonthsLocal, getLocalDateString } from './dateUtils';
 
 export type ExpiryAlertLevel =
   | 'expired' // < 0 días (Vencido)
@@ -26,7 +27,7 @@ export const DOCUMENT_TYPES_ORDER: DocumentType[] = [
 
 export const calculateDaysRemaining = (expiryDate: string, todayStr?: string): number => {
   if (!expiryDate) return 9999;
-  const baseToday = todayStr || new Date().toISOString().split('T')[0];
+  const baseToday = todayStr || getLocalDateString();
   const exp = new Date(`${expiryDate}T00:00:00`);
   const tod = new Date(`${baseToday}T00:00:00`);
   return Math.ceil((exp.getTime() - tod.getTime()) / (1000 * 3600 * 24));
@@ -103,10 +104,7 @@ export const ensureAmbulanceDocuments = (amb: Ambulance): VehicleDocument[] => {
   existing.forEach((doc) => byType.set(doc.type, doc));
 
   const subtractMonths = (dateStr: string, months: number): string => {
-    const d = new Date(`${dateStr}T00:00:00`);
-    if (isNaN(d.getTime())) return '2026-01-01';
-    d.setMonth(d.getMonth() - months);
-    return d.toISOString().split('T')[0];
+    return addMonthsLocal(dateStr, -months);
   };
 
   const defaults: Record<DocumentType, () => VehicleDocument> = {

@@ -64,7 +64,18 @@ export const getStorageUsageStats = (): StorageUsageStats => {
 export const safeLoadFromStorage = <T,>(key: string, fallback: T): T => {
   try {
     const saved = localStorage.getItem(key);
-    return saved ? (JSON.parse(saved) as T) : fallback;
+    if (!saved) return fallback;
+    const parsed = JSON.parse(saved);
+    if (Array.isArray(fallback)) {
+      if (!Array.isArray(parsed)) return fallback;
+      return parsed.filter((item) => item && typeof item === 'object') as T;
+    }
+    if (fallback !== null && typeof fallback === 'object') {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return fallback;
+      }
+    }
+    return parsed as T;
   } catch {
     return fallback;
   }

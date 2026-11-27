@@ -177,14 +177,18 @@ export const onFirebaseAuthChanged = (
 export const pushFleetStateToFirebase = async (
   payload: FirebaseFleetPayload,
   projectId = DEFAULT_FIREBASE_CONFIG.projectId,
-  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey
+  apiKey = DEFAULT_FIREBASE_CONFIG.apiKey,
+  onlyKeys?: FleetCollectionKey[]
 ): Promise<{ ok: boolean; timestamp: string; error?: string }> => {
   try {
     const { db } = getFirebaseServices(projectId, apiKey);
     await ensureFirebaseAuthSession(projectId, apiKey);
 
+    const keysToPush =
+      onlyKeys && onlyKeys.length > 0 ? onlyKeys : [...FLEET_COLLECTION_KEYS];
+
     await Promise.all(
-      FLEET_COLLECTION_KEYS.map((key) =>
+      keysToPush.map((key) =>
         setDoc(doc(db, 'ambufleet_sync', key), {
           items: payload[key],
           updatedAt: payload.updatedAt,

@@ -1,5 +1,6 @@
 import { Ambulance } from '../types';
 import { collectAllDocumentAlerts } from './expiryAlerts';
+import { getLocalDateString } from './dateUtils';
 import { STORAGE_KEY } from './storage';
 
 const LAST_NOTIFY_DATE_KEY = `${STORAGE_KEY}_last_expiry_notify_date`;
@@ -75,7 +76,7 @@ export const checkAndNotifyCriticalExpiries = async (
     };
   }
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   try {
     if (!force && localStorage.getItem(LAST_NOTIFY_DATE_KEY) === todayStr) {
       return {

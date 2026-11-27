@@ -1,5 +1,6 @@
 import React from 'react';
 import { DualBatteryStatus, TirePosition, TireStatus } from '../types';
+import { getLocalDateString } from '../utils/dateUtils';
 import { BatteryCharging, Disc, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface TiresAndBatteriesPanelProps {
@@ -10,11 +11,11 @@ interface TiresAndBatteriesPanelProps {
 }
 
 const DEFAULT_TIRES: TireStatus[] = [
-  { position: 'FL', label: 'Delantero Izq.', treadDepthMm: 6.2, pressureBar: 4.5, condition: 'OK', lastCheckDate: new Date().toISOString().split('T')[0] },
-  { position: 'FR', label: 'Delantero Der.', treadDepthMm: 6.0, pressureBar: 4.5, condition: 'OK', lastCheckDate: new Date().toISOString().split('T')[0] },
-  { position: 'RL', label: 'Trasero Izq.', treadDepthMm: 5.8, pressureBar: 4.8, condition: 'OK', lastCheckDate: new Date().toISOString().split('T')[0] },
-  { position: 'RR', label: 'Trasero Der.', treadDepthMm: 5.7, pressureBar: 4.8, condition: 'OK', lastCheckDate: new Date().toISOString().split('T')[0] },
-  { position: 'SPARE', label: 'Repuesto', treadDepthMm: 7.0, pressureBar: 4.8, condition: 'OK', lastCheckDate: new Date().toISOString().split('T')[0] },
+  { position: 'FL', label: 'Delantero Izq.', treadDepthMm: 6.2, pressureBar: 4.5, condition: 'OK', lastCheckDate: 'Sin revisar' },
+  { position: 'FR', label: 'Delantero Der.', treadDepthMm: 6.0, pressureBar: 4.5, condition: 'OK', lastCheckDate: 'Sin revisar' },
+  { position: 'RL', label: 'Trasero Izq.', treadDepthMm: 5.8, pressureBar: 4.8, condition: 'OK', lastCheckDate: 'Sin revisar' },
+  { position: 'RR', label: 'Trasero Der.', treadDepthMm: 5.7, pressureBar: 4.8, condition: 'OK', lastCheckDate: 'Sin revisar' },
+  { position: 'SPARE', label: 'Repuesto', treadDepthMm: 7.0, pressureBar: 4.8, condition: 'OK', lastCheckDate: 'Sin revisar' },
 ];
 
 const DEFAULT_BATTERIES: DualBatteryStatus = {
@@ -23,7 +24,7 @@ const DEFAULT_BATTERIES: DualBatteryStatus = {
   auxVoltage: 12.8,
   auxStatus: 'OK',
   auxType: 'AGM 105Ah Célula Sanitaria',
-  lastCheckDate: new Date().toISOString().split('T')[0],
+  lastCheckDate: 'Sin revisar',
 };
 
 const computeTireCondition = (mm: number): TireStatus['condition'] => {
@@ -60,7 +61,7 @@ export const TiresAndBatteriesPanel: React.FC<TiresAndBatteriesPanelProps> = ({
   ) => {
     const val = parseFloat(rawVal);
     if (isNaN(val)) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     const updated = currentTires.map((t) => {
       if (t.position !== pos) return t;
       const next = {
@@ -77,7 +78,7 @@ export const TiresAndBatteriesPanel: React.FC<TiresAndBatteriesPanelProps> = ({
   const handleBatteryVoltage = (field: 'starterVoltage' | 'auxVoltage', rawVal: string) => {
     const val = parseFloat(rawVal);
     if (isNaN(val)) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     const next: DualBatteryStatus = {
       ...currentBatteries,
       [field]: val,

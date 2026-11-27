@@ -327,8 +327,12 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                 <input
                   type="number"
                   required
+                  min={0}
                   value={mileageInput}
-                  onChange={(e) => setMileageInput(Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setMileageInput(isNaN(val) ? (selectedAmb?.mileage || 0) : Math.max(0, val));
+                  }}
                   className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-semibold"
                 />
               </div>

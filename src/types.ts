@@ -199,6 +199,7 @@ export interface WorkOrderPartUsed {
   partName: string;
   sku: string;
   quantity: number;
+  deductedFromStock?: boolean;
 }
 
 export interface WorkOrder {
