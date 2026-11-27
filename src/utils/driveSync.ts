@@ -1,12 +1,14 @@
 import { STORAGE_KEY } from './storage';
 
 const DRIVE_WEBHOOK_KEY = `${STORAGE_KEY}_gdrive_webhook_url`;
+export const DEFAULT_DRIVE_WEBHOOK_URL =
+  'https://script.google.com/macros/s/AKfycbyu3OLqb87JgoCBv_9w8Vny7mUDFgFYyi_1xva1-5soLUTGCrM9edJnMSPYZQSovlvdwg/exec';
 
 export const getDriveWebhookUrl = (): string => {
   try {
-    return localStorage.getItem(DRIVE_WEBHOOK_KEY) || '';
+    return localStorage.getItem(DRIVE_WEBHOOK_KEY) || DEFAULT_DRIVE_WEBHOOK_URL;
   } catch {
-    return '';
+    return DEFAULT_DRIVE_WEBHOOK_URL;
   }
 };
 
