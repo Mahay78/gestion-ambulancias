@@ -3,7 +3,7 @@ import { STORAGE_KEY } from './storage';
 const DRIVE_WEBHOOK_KEY = `${STORAGE_KEY}_gdrive_webhook_url`;
 const DRIVE_FOLDER_URL_KEY = `${STORAGE_KEY}_gdrive_root_folder_url`;
 export const DEFAULT_DRIVE_WEBHOOK_URL =
-  'https://script.google.com/macros/s/AKfycbyu3OLqb87JgoCBv_9w8Vny7mUDFgFYyi_1xva1-5soLUTGCrM9edJnMSPYZQSovlvdwg/exec';
+  'https://script.google.com/macros/s/AKfycbzYi-86Y8JoWRCAAqr_54iXAODd-fhoIb3BWT2NhtYwemYIpyk9Cqb-loFr9V72VledSA/exec';
 
 export const getSavedDriveFolderUrl = (): string => {
   try {
