@@ -71,6 +71,11 @@ import {
 import { checkAndNotifyCriticalExpiries } from './utils/notifications';
 import { ensureAmbulanceDocuments } from './utils/expiryAlerts';
 import {
+  backupFleetJsonToGoogleDrive,
+  getDriveWebhookUrl,
+  saveDriveWebhookUrl,
+} from './utils/driveSync';
+import {
   LayoutDashboard,
   Truck,
   CalendarClock,
@@ -224,6 +229,11 @@ export function App() {
   const [showAiModal, setShowAiModal] = useState<boolean>(false);
   const [showBreakdownReportModal, setShowBreakdownReportModal] =
     useState<boolean>(false);
+  const [driveWebhookUrl, setDriveWebhookUrl] = useState<string>(() =>
+    getDriveWebhookUrl()
+  );
+  const [driveStatusMsg, setDriveStatusMsg] = useState<string>('');
+  const [isUploadingDrive, setIsUploadingDrive] = useState<boolean>(false);
   const [isUnitReportMode, setIsUnitReportMode] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -2631,6 +2641,67 @@ export function App() {
                 )}
               </div>
             )}
+
+            {/* Copia y archivo en Google Drive (flotaambulz@gmail.com - 15 GB gratis) */}
+            <div className="pt-3 border-t border-slate-200 space-y-2 text-xs">
+              <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                <HardDrive className="w-4 h-4 text-emerald-600" />
+                Google Drive (flotaambulz@gmail.com — 15 GB)
+              </span>
+              <p className="text-[11px] text-slate-500">
+                Pega aquí la URL de tu Web App de Google Apps Script para guardar copias de seguridad JSON en Drive.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={driveWebhookUrl}
+                  onChange={(e) => {
+                    setDriveWebhookUrl(e.target.value);
+                    saveDriveWebhookUrl(e.target.value);
+                    setDriveStatusMsg('');
+                  }}
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  className="flex-1 px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 text-[11px]"
+                />
+                <button
+                  type="button"
+                  disabled={isUploadingDrive}
+                  onClick={async () => {
+                    setIsUploadingDrive(true);
+                    setDriveStatusMsg('Subiendo copia JSON a Google Drive...');
+                    const res = await backupFleetJsonToGoogleDrive(
+                      {
+                        exportedAt: new Date().toISOString(),
+                        ambulances,
+                        workshops,
+                        preventiveSchedules,
+                        checklists,
+                        workOrders,
+                        spareParts,
+                        stockMovements,
+                      },
+                      getLocalDateString()
+                    );
+                    setIsUploadingDrive(false);
+                    if (res.ok) {
+                      setDriveStatusMsg(
+                        `✅ Backup subido a Google Drive (${res.fileUrl || 'Carpeta Ambu-lzflota/Backups'})`
+                      );
+                    } else {
+                      setDriveStatusMsg(`⚠️ ${res.error}`);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shrink-0"
+                >
+                  Subir a Drive
+                </button>
+              </div>
+              {driveStatusMsg && (
+                <p className="text-[11px] font-semibold text-slate-700 break-all">
+                  {driveStatusMsg}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
