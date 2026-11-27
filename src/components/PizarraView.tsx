@@ -85,7 +85,7 @@ export const collectUnitTodos = (
       });
     });
 
-  // 3. Checklists / Partes pendientes de asignar taller
+  // 3. Checklists / Partes pendientes de asignar taller (listar cada avería individualmente)
   checklists
     .filter(
       (c) =>
@@ -96,19 +96,42 @@ export const collectUnitTodos = (
       const isDotacionReport =
         chk.generalObservations.includes('[DOTACIÓN UNIDAD') ||
         (chk.missingParts && chk.missingParts.length > 0);
-      todos.push({
-        id: `chk-${chk.id}`,
-        category: isDotacionReport ? 'Dotación' : 'Checklist / Parte',
-        urgency:
-          chk.overallUrgency === 'Inmovilización Inmediata'
-            ? 'critical'
-            : 'warning',
-        title:
-          chk.generalObservations ||
-          'Incidencia pendiente de asignar a taller',
-        detail: `Parte del ${chk.date} por ${chk.inspectorName}`,
-        targetTab: 'checklist',
-      });
+      const faultItems = chk.items.filter(
+        (i) => i.status === 'Avería' || i.status === 'Observación'
+      );
+
+      if (faultItems.length > 0) {
+        faultItems.forEach((item) => {
+          todos.push({
+            id: `chk-${chk.id}-${item.id}`,
+            category: isDotacionReport ? 'Dotación' : 'Checklist / Parte',
+            urgency:
+              item.status === 'Avería' &&
+              chk.overallUrgency === 'Inmovilización Inmediata'
+                ? 'critical'
+                : item.status === 'Avería'
+                ? 'warning'
+                : 'info',
+            title: `${item.status === 'Avería' ? 'Avería' : 'Observación'}: ${item.label}`,
+            detail: `${item.comment ? `${item.comment} • ` : ''}Parte del ${chk.date} por ${chk.inspectorName}`,
+            targetTab: 'checklist',
+          });
+        });
+      } else {
+        todos.push({
+          id: `chk-${chk.id}`,
+          category: isDotacionReport ? 'Dotación' : 'Checklist / Parte',
+          urgency:
+            chk.overallUrgency === 'Inmovilización Inmediata'
+              ? 'critical'
+              : 'warning',
+          title:
+            chk.generalObservations ||
+            'Incidencia pendiente de asignar a taller',
+          detail: `Parte del ${chk.date} por ${chk.inspectorName}`,
+          targetTab: 'checklist',
+        });
+      }
     });
 
   // 4. Preventivos vencidos o próximos (<= 25d o <= 2500 km)
