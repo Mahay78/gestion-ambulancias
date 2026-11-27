@@ -37,6 +37,7 @@ import {
   getStorageUsageStats,
   getStorageUsageStatsAsync,
   saveAutoBackupSnapshot,
+  loadAutoBackupSnapshot,
   loadAutoBackupSnapshotAsync,
   getCloudSyncConfig,
   saveCloudSyncConfig,
