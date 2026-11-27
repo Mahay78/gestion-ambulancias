@@ -53,7 +53,7 @@ interface FleetViewProps {
   stockMovements?: StockMovement[];
   workshops?: ExternalWorkshop[];
   initialSelectedAmbulanceId?: string;
-  onAddAmbulance: (amb: Omit<Ambulance, 'id'>) => void;
+  onAddAmbulance: (amb: Omit<Ambulance, 'id'>) => string | void;
   onDeleteAmbulance: (id: string) => void;
   onUpdateStatus: (id: string, status: AmbulanceStatus) => void;
   onUpdateMileage: (id: string, newMileage: number) => void;
@@ -179,8 +179,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAmb.plate.trim()) return;
-    onAddAmbulance({
+    const createdId = onAddAmbulance({
       ...newAmb,
+      code: newAmb.code.trim().toUpperCase(),
+      plate: newAmb.plate.trim().toUpperCase(),
       lastServiceDate: getLocalDateString(),
       lastServiceMileage: newAmb.mileage,
       onboardParts: [
@@ -210,6 +212,10 @@ export const FleetView: React.FC<FleetViewProps> = ({
         },
       ],
     });
+    setFilterStatus('Todas');
+    if (typeof createdId === 'string' && createdId) {
+      setSelectedAmbId(createdId);
+    }
     setShowAddModal(false);
   };
 
@@ -1409,7 +1415,7 @@ export const FleetView: React.FC<FleetViewProps> = ({
       {/* Modal Dar de Alta Ambulancia */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               Añadir Nueva Unidad (Ambulancia) a la Flota
             </h3>

@@ -747,12 +747,18 @@ export function App() {
   };
 
   // --- Handlers Flota ---
-  const handleAddAmbulance = (newAmb: Omit<Ambulance, 'id'>) => {
-    const created: Ambulance = {
+  const handleAddAmbulance = (newAmb: Omit<Ambulance, 'id'>): string => {
+    const newId = `amb-${Date.now()}`;
+    const baseCreated: Ambulance = {
       ...newAmb,
-      id: `amb-${Date.now()}`,
+      id: newId,
+    };
+    const created: Ambulance = {
+      ...baseCreated,
+      documents: ensureAmbulanceDocuments(baseCreated),
     };
     setAmbulances((prev) => [...prev, created]);
+    return newId;
   };
 
   const handleDeleteAmbulance = (id: string) => {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ambu-lzflota-pwa-v22';
+const CACHE_NAME = 'ambu-lzflota-pwa-v23';
 const APP_SHELL = [
   './',
   './index.html',
