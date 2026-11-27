@@ -155,6 +155,7 @@ import {
   ShieldCheck,
   Volume2,
   VolumeX,
+  MoreVertical,
 } from 'lucide-react';
 const AiAssistantModal = lazy(() =>
   import('./components/AiAssistantModal').then((m) => ({
@@ -299,6 +300,7 @@ export function App() {
   const [showAlertCenter, setShowAlertCenter] = useState<boolean>(false);
   const [showAuditLog, setShowAuditLog] = useState<boolean>(false);
   const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
+  const [showToolsMenu, setShowToolsMenu] = useState<boolean>(false);
   const [darkMode, setDarkMode] = useState<boolean>(() =>
     safeLoadFromStorage<boolean>(`${STORAGE_KEY}_darkMode`, false)
   );
@@ -2655,14 +2657,14 @@ export function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 relative">
             <button
               type="button"
               onClick={() => setShowGlobalSearch(true)}
               title="Búsqueda global en toda la flota"
-              className="hidden md:flex w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold items-center justify-center gap-1.5 border border-slate-700 transition"
+              className="hidden sm:flex h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold items-center justify-center gap-1.5 border border-slate-700 transition"
             >
-              <Search className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-blue-400" />
+              <Search className="w-3.5 h-3.5 text-blue-400" />
               <span className="hidden md:inline">Buscar</span>
             </button>
             {(() => {
@@ -2678,7 +2680,7 @@ export function App() {
                   type="button"
                   onClick={() => setShowAlertCenter(true)}
                   title="Centro único de alertas"
-                  className="hidden md:flex relative h-9 px-2.5 sm:h-auto sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold items-center justify-center gap-1.5 border border-slate-700 transition"
+                  className="relative h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition"
                 >
                   <Bell className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-400" />
                   <span className="hidden xl:inline">Alertas</span>
@@ -2690,60 +2692,8 @@ export function App() {
                 </button>
               );
             })()}
-            <button
-              type="button"
-              onClick={handleToggleAlarmSound}
-              title={
-                alarmSoundEnabled
-                  ? 'Alarma sonora activa (pulsa para silenciar)'
-                  : 'Alarma silenciada (pulsa para activar y probar)'
-              }
-              className={`hidden md:flex p-2 rounded-xl text-xs font-semibold border transition ${
-                alarmSoundEnabled
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                  : 'bg-slate-800 text-slate-400 border-slate-700'
-              }`}
-            >
-              {alarmSoundEnabled ? (
-                <Volume2 className="w-3.5 h-3.5" />
-              ) : (
-                <VolumeX className="w-3.5 h-3.5" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDarkMode((v) => !v)}
-              title={darkMode ? 'Desactivar modo oscuro' : 'Activar modo oscuro nocturno'}
-              className={`hidden md:flex p-2 rounded-xl text-xs font-semibold border transition ${
-                darkMode
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-              }`}
-            >
-              {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setLargeText((v) => !v)}
-              title={largeText ? 'Tamaño de texto normal' : 'Aumentar tamaño de texto'}
-              className={`hidden md:flex p-2 rounded-xl text-xs font-semibold border transition ${
-                largeText
-                  ? 'bg-blue-600 text-white border-blue-400'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-              }`}
-            >
-              <Type className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowHelpModal(true)}
-              title="Guía rápida, ayuda y privacidad (RGPD)"
-              className="hidden md:flex p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
-            >
-              <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
-            </button>
-            {/* Selector de Rol: Encargado (todo) / Operador (flota, incidencias, stock, checklists) */}
-            <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+            {/* Selector de Rol */}
+            <div className="hidden sm:flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-xl px-2.5 h-9 text-xs">
               <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               <select
                 value={currentRole}
@@ -2766,7 +2716,7 @@ export function App() {
                   }
                 }}
                 aria-label="Seleccionar rol de usuario"
-                className="bg-transparent text-white font-bold text-[11px] sm:text-xs focus:outline-none cursor-pointer"
+                className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
               >
                 <option value="Encargado" className="text-slate-900">
                   Encargado
@@ -2782,7 +2732,7 @@ export function App() {
                   ? 'PWA Conectada (Service Worker activo para uso offline)'
                   : 'Modo sin conexión activo: trabajando sobre caché local'
               }
-              className={`px-2 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 border ${
+              className={`hidden lg:flex h-9 px-2.5 rounded-xl text-[11px] font-bold items-center gap-1 border ${
                 isOnline
                   ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
                   : 'bg-amber-950/80 text-amber-300 border-amber-700'
@@ -2798,139 +2748,191 @@ export function App() {
               ) : (
                 <>
                   <WifiOff className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Offline</span>
+                  <span>Offline</span>
                 </>
               )}
             </span>
 
-            <button
-              type="button"
-              onClick={() => setShowBackupModal(true)}
-              className={`hidden sm:flex px-3 py-1.5 rounded-xl text-white text-xs font-bold items-center gap-1.5 ring-1 ring-white/15 shadow-sm transition ${
-                storageStats.isWarning || quotaAlert
-                  ? 'bg-amber-600 hover:bg-amber-500'
-                  : 'bg-blue-600 hover:bg-blue-500'
-              }`}
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Backup</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/25 font-mono">
-                {storageStats.usagePercent}%
-              </span>
-            </button>
+            {/* Botón único de Herramientas / Más opciones (Móvil, Tablet y Web) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowToolsMenu((v) => !v)}
+                title="Herramientas y ajustes"
+                aria-label="Herramientas y ajustes"
+                className={`h-9 w-9 sm:w-auto sm:px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition ${
+                  showToolsMenu
+                    ? 'bg-blue-600 text-white border-blue-400'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                }`}
+              >
+                <MoreVertical className="w-4 h-4" />
+                <span className="hidden lg:inline">Herramientas</span>
+              </button>
+
+              {showToolsMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowToolsMenu(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-60 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-2 z-50 space-y-1 text-xs text-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowToolsMenu(false);
+                        setShowGlobalSearch(true);
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2 font-semibold"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Search className="w-4 h-4 text-blue-400" />
+                        Búsqueda global
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleToggleAlarmSound();
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2 font-semibold"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        {alarmSoundEnabled ? (
+                          <Volume2 className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <VolumeX className="w-4 h-4 text-slate-400" />
+                        )}
+                        Alarma de partes
+                      </span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          alarmSoundEnabled
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {alarmSoundEnabled ? 'Activa' : 'Muda'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDarkMode((v) => !v)}
+                      className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2 font-semibold"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        {darkMode ? (
+                          <Sun className="w-4 h-4 text-amber-300" />
+                        ) : (
+                          <Moon className="w-4 h-4 text-slate-300" />
+                        )}
+                        Modo visual
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold">
+                        {darkMode ? 'Nocturno' : 'Día'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLargeText((v) => !v)}
+                      className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2 font-semibold"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Type className="w-4 h-4 text-blue-400" />
+                        Tamaño de texto
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold">
+                        {largeText ? 'Grande' : 'Normal'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowToolsMenu(false);
+                        setShowBackupModal(true);
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2 font-semibold"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Download className="w-4 h-4 text-blue-400" />
+                        Backup y Nube
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-600/30 text-blue-200 font-mono font-bold">
+                        {storageStats.usagePercent}%
+                      </span>
+                    </button>
+                    {currentRole === 'Encargado' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowToolsMenu(false);
+                          setShowAuditLog(true);
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2 font-semibold"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                          Auditoría
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold">
+                          {auditLogs.length}
+                        </span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowToolsMenu(false);
+                        setShowHelpModal(true);
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl hover:bg-slate-800 flex items-center justify-between gap-2 font-semibold"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <HelpCircle className="w-4 h-4 text-emerald-400" />
+                        Ayuda / Guía / RGPD
+                      </span>
+                    </button>
+                    <div className="sm:hidden pt-1 mt-1 border-t border-slate-800 px-2 py-1.5 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">Rol:</span>
+                      <select
+                        value={currentRole}
+                        onChange={(e) => {
+                          const nextRole = e.target.value as UserRole;
+                          setShowToolsMenu(false);
+                          if (nextRole === 'Encargado' && currentRole === 'Operador') {
+                            setPinInput('');
+                            setPinError('');
+                            setShowPinModal(true);
+                            return;
+                          }
+                          setCurrentRole(nextRole);
+                        }}
+                        className="bg-slate-800 text-white font-bold text-xs px-2 py-1 rounded-lg border border-slate-700"
+                      >
+                        <option value="Encargado">Encargado</option>
+                        <option value="Operador">Operador</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={handleLogout}
               title="Bloquear aplicación / Cerrar sesión"
-              className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-1.5 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-100 text-xs font-semibold flex items-center justify-center gap-1.5 border border-rose-700/80 shadow-sm transition"
+              className="w-9 h-9 sm:w-auto sm:px-3 rounded-xl bg-rose-950/90 hover:bg-rose-900 text-rose-100 text-xs font-semibold flex items-center justify-center gap-1.5 border border-rose-700/80 shadow-sm transition"
             >
               <LogOut className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
               <span className="hidden lg:inline">Salir</span>
             </button>
           </div>
         </div>
-
-        {/* Barra de iconos de utilidades completa para móvil (< md) */}
-        <div className="md:hidden border-t border-slate-800/90 bg-slate-950/60 px-2 py-1.5 flex items-center justify-around gap-1 overflow-x-auto no-scrollbar">
-          <button
-            type="button"
-            onClick={() => setShowGlobalSearch(true)}
-            className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white shrink-0"
-          >
-            <Search className="w-4 h-4 text-blue-400" />
-            <span>Buscar</span>
-          </button>
-          {(() => {
-            const totalAlerts = buildUnifiedAlerts({
-              ambulances,
-              preventiveSchedules,
-              spareParts,
-              workOrders,
-              workshops,
-            }).length;
-            return (
-              <button
-                type="button"
-                onClick={() => setShowAlertCenter(true)}
-                className="relative flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white shrink-0"
-              >
-                <div className="relative">
-                  <Bell className="w-4 h-4 text-amber-400" />
-                  {totalAlerts > 0 && (
-                    <span className="absolute -top-1.5 -right-2 px-1 min-w-[14px] h-[14px] rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
-                      {totalAlerts}
-                    </span>
-                  )}
-                </div>
-                <span>Alertas</span>
-              </button>
-            );
-          })()}
-          <button
-            type="button"
-            onClick={handleToggleAlarmSound}
-            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold shrink-0 ${
-              alarmSoundEnabled ? 'text-emerald-400' : 'text-slate-400'
-            }`}
-          >
-            {alarmSoundEnabled ? (
-              <Volume2 className="w-4 h-4" />
-            ) : (
-              <VolumeX className="w-4 h-4" />
-            )}
-            <span>{alarmSoundEnabled ? 'Alarma' : 'Mudo'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setDarkMode((v) => !v)}
-            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold shrink-0 ${
-              darkMode ? 'text-amber-300' : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            <span>{darkMode ? 'Día' : 'Oscuro'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setLargeText((v) => !v)}
-            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold shrink-0 ${
-              largeText ? 'text-blue-400' : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            <Type className="w-4 h-4" />
-            <span>Texto</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowBackupModal(true)}
-            className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white shrink-0"
-          >
-            <Download className="w-4 h-4 text-blue-400" />
-            <span>Backup</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowHelpModal(true)}
-            className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white shrink-0"
-          >
-            <HelpCircle className="w-4 h-4 text-emerald-400" />
-            <span>Ayuda</span>
-          </button>
-          {currentRole === 'Encargado' && (
-            <button
-              type="button"
-              onClick={() => setShowAuditLog(true)}
-              className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white shrink-0"
-            >
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Auditoría</span>
-            </button>
-          )}
-        </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 pb-24 sm:py-6 lg:pb-8 flex-1 space-y-4 overflow-x-hidden">
+      <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 pb-24 md:py-6 md:pb-8 flex-1 space-y-4 overflow-x-hidden">
         {incomingUnitAlert && (
           <div className="p-4 rounded-2xl bg-rose-600 text-white shadow-xl border-2 border-rose-300 flex flex-wrap items-center justify-between gap-3 animate-pulse">
             <div className="flex items-start gap-3 min-w-0">
@@ -3535,52 +3537,65 @@ export function App() {
           </div>
         </div>
       )}
-      {/* Barra de navegación inferior fija con TODOS los módulos para móvil y tablet (< lg) */}
+      {/* Barra de navegación inferior fija minimalista SOLO para móvil (< md) */}
       <nav
         aria-label="Navegación móvil"
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 safe-bottom shadow-[0_-4px_20px_rgba(0,0,0,0.25)] print:hidden"
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 safe-bottom shadow-[0_-4px_20px_rgba(0,0,0,0.25)] print:hidden"
       >
-        <div className="flex items-center overflow-x-auto no-scrollbar px-1.5 py-1 gap-1">
-          {navItems.map((item) => {
-            const isActive = activeTab === item.id;
-            const shortLabels: Record<ActiveTab, string> = {
-              dashboard: 'Panel',
-              pizarra: 'Pizarra',
-              fleet: 'Flota',
-              preventive: 'Preventivo',
-              checklist: 'Checklist',
-              workorders: 'Talleres',
-              workshops: 'Proveed.',
-              parts: 'Almacén',
-            };
+        <div className="grid grid-cols-4 items-center max-w-md mx-auto">
+          {[
+            {
+              id: 'dashboard' as ActiveTab,
+              label: 'Panel',
+              icon: <LayoutDashboard className="w-5 h-5" />,
+            },
+            {
+              id: 'pizarra' as ActiveTab,
+              label: 'Pizarra',
+              icon: <LayoutGrid className="w-5 h-5" />,
+            },
+            {
+              id: 'fleet' as ActiveTab,
+              label: 'Flota',
+              icon: <Truck className="w-5 h-5" />,
+            },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
             return (
               <button
-                key={item.id}
+                key={tab.id}
                 type="button"
                 onClick={() => {
-                  setActiveTab(item.id);
+                  setActiveTab(tab.id);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className={`relative min-w-[66px] flex-1 py-1.5 px-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition shrink-0 ${
+                className={`py-2 px-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition ${
                   isActive
-                    ? 'text-blue-400 bg-blue-600/15'
+                    ? 'text-blue-400'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <div className="relative p-1">
-                  {item.icon}
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className="absolute -top-1 -right-2 px-1 min-w-[15px] h-[15px] rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
-                      {item.badge}
-                    </span>
-                  )}
+                <div
+                  className={`p-1.5 rounded-xl transition ${
+                    isActive ? 'bg-blue-600/20 text-blue-400' : ''
+                  }`}
+                >
+                  {tab.icon}
                 </div>
-                <span className="truncate max-w-full">
-                  {shortLabels[item.id] || item.label}
-                </span>
+                <span className="truncate max-w-full">{tab.label}</span>
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="py-2 px-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-slate-400 hover:text-slate-200 transition"
+          >
+            <div className="p-1.5 rounded-xl">
+              <Menu className="w-5 h-5" />
+            </div>
+            <span>Menú</span>
+          </button>
         </div>
       </nav>
 
@@ -3589,7 +3604,7 @@ export function App() {
         type="button"
         onClick={() => setShowAiModal(true)}
         title="Abrir Asistente IA de Flota (Gratis)"
-        className="fixed bottom-20 right-4 lg:bottom-5 lg:right-5 z-40 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-xl shadow-indigo-950/30 ring-2 ring-white/30 print:hidden"
+        className="fixed bottom-20 right-4 md:bottom-5 md:right-5 z-40 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-xl shadow-indigo-950/30 ring-2 ring-white/30 print:hidden"
       >
         <Sparkles className="w-5 h-5 sm:w-4 sm:h-4" />
         <span className="hidden sm:inline">Asistente IA</span>
