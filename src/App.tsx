@@ -74,6 +74,7 @@ import {
   backupFleetJsonToGoogleDrive,
   getDriveWebhookUrl,
   saveDriveWebhookUrl,
+  uploadDataUrlToUnitFolder,
 } from './utils/driveSync';
 import {
   LayoutDashboard,
@@ -782,6 +783,15 @@ export function App() {
     ambulanceId: string,
     updatedDoc: VehicleDocument
   ) => {
+    const targetAmb = ambulances.find((a) => a.id === ambulanceId);
+    if (updatedDoc.fileDataUrl && targetAmb) {
+      uploadDataUrlToUnitFolder(
+        `${targetAmb.code} (${targetAmb.plate})`,
+        `${updatedDoc.type}_${updatedDoc.fileName || 'documento'}`,
+        updatedDoc.fileDataUrl
+      );
+    }
+
     setAmbulances((prev) =>
       prev.map((a) => {
         if (a.id !== ambulanceId) return a;
@@ -1132,6 +1142,18 @@ export function App() {
       id: `chk-rep-${Date.now()}`,
     };
 
+    const targetAmb = ambulances.find((a) => a.id === checklistData.ambulanceId);
+    if (targetAmb && checklistData.photos && checklistData.photos.length > 0) {
+      const folder = `${targetAmb.code} (${targetAmb.plate})`;
+      checklistData.photos.forEach((photoUrl, idx) => {
+        uploadDataUrlToUnitFolder(
+          folder,
+          `Checklist_${checklistData.date}_foto_${idx + 1}.jpg`,
+          photoUrl
+        );
+      });
+    }
+
     setAmbulances((prev) =>
       prev.map((a) => {
         if (a.id !== checklistData.ambulanceId) return a;
@@ -1361,6 +1383,18 @@ export function App() {
     workshopConformitySignature?: string,
     newPhotoUrl?: string
   ) => {
+    if (newPhotoUrl) {
+      const wo = workOrders.find((w) => w.id === woId);
+      const amb = wo ? ambulances.find((a) => a.id === wo.ambulanceId) : undefined;
+      if (wo && amb) {
+        uploadDataUrlToUnitFolder(
+          `${amb.code} (${amb.plate})`,
+          `Orden_${wo.code}_${getLocalDateString()}.jpg`,
+          newPhotoUrl
+        );
+      }
+    }
+
     setWorkOrders((prev) =>
       prev.map((wo) => {
         if (wo.id !== woId) return wo;

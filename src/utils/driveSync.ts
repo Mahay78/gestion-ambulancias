@@ -110,3 +110,22 @@ export const backupFleetJsonToGoogleDrive = async (
     subfolder: 'Backups',
   });
 };
+
+export const uploadDataUrlToUnitFolder = (
+  unitFolderName: string,
+  fileName: string,
+  dataUrl: string
+): void => {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+  const mimeMatch = dataUrl.match(/^data:([^;]+);base64,/);
+  const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+
+  void uploadToGoogleDrive({
+    fileName,
+    mimeType,
+    base64Content: dataUrl,
+    subfolder: unitFolderName,
+  });
+};

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { INITIAL_AMBULANCES } from '../initialData';
 import { compressImageFile } from '../utils/imageCompression';
 import { getLocalDateString } from '../utils/dateUtils';
+import { uploadDataUrlToUnitFolder } from '../utils/driveSync';
 import {
   DEFAULT_FIREBASE_CONFIG,
   PublicPlateEntry,
@@ -166,6 +167,18 @@ export const UnitReportView: React.FC<UnitReportViewProps> = ({
     setIsSending(false);
 
     if (res.ok) {
+      if (photos.length > 0) {
+        const unitFolder = selectedPlateEntry
+          ? `${selectedPlateEntry.code} (${selectedPlateEntry.plate})`
+          : cleanPlate;
+        photos.forEach((p, idx) => {
+          uploadDataUrlToUnitFolder(
+            unitFolder,
+            `ParteUnidad_${report.date}_foto_${idx + 1}.jpg`,
+            p
+          );
+        });
+      }
       if (onLocalFallbackSubmit) onLocalFallbackSubmit(report);
       setSubmittedReport(report);
     } else {
