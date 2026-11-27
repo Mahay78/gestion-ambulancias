@@ -77,6 +77,13 @@ export interface DualBatteryStatus {
   notes?: string;
 }
 
+export interface BoardTask {
+  id: string;
+  text: string;
+  done: boolean;
+  createdAt: string;
+}
+
 export interface Ambulance {
   id: string;
   code: string; // ej. AMB-01 .. AMB-21
@@ -101,6 +108,7 @@ export interface Ambulance {
   bodyDamages?: BodyDamageMark[];
   tires?: TireStatus[];
   batteries?: DualBatteryStatus;
+  boardTasks?: BoardTask[];
 }
 
 export type PreventiveCategory =

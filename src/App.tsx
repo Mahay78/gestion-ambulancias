@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Ambulance,
   AmbulanceStatus,
+  BoardTask,
   ExternalWorkshop,
   FleetChecklist,
   PreventiveSchedule,
@@ -106,12 +107,15 @@ import {
   Sparkles,
   FileText,
   FolderOpen,
+  LayoutGrid,
 } from 'lucide-react';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { BreakdownReportModal } from './components/BreakdownReportModal';
+import { PizarraView, collectUnitTodos } from './components/PizarraView';
 
 type ActiveTab =
   | 'dashboard'
+  | 'pizarra'
   | 'fleet'
   | 'preventive'
   | 'checklist'
@@ -1380,6 +1384,12 @@ export function App() {
     );
   };
 
+  const handleUpdateBoardTasks = (ambulanceId: string, tasks: BoardTask[]) => {
+    setAmbulances((prev) =>
+      prev.map((a) => (a.id === ambulanceId ? { ...a, boardTasks: tasks } : a))
+    );
+  };
+
   const handleUpdateWorkOrderSignatureAndPhotos = (
     woId: string,
     workshopConformitySignature?: string,
@@ -1724,6 +1734,23 @@ export function App() {
       label: 'Panel / Disponibilidad',
       shortLabel: 'Inicio',
       icon: <LayoutDashboard className="w-4 h-4" />,
+    },
+    {
+      id: 'pizarra',
+      label: 'Pizarra (Por hacer)',
+      shortLabel: 'Pizarra',
+      icon: <LayoutGrid className="w-4 h-4" />,
+      badge: ambulances.reduce((sum, amb) => {
+        const autoCount = collectUnitTodos(
+          amb,
+          workOrders,
+          checklists,
+          preventiveSchedules,
+          getLocalDateString()
+        ).length;
+        const manualCount = (amb.boardTasks || []).filter((t) => !t.done).length;
+        return sum + autoCount + manualCount;
+      }, 0),
     },
     {
       id: 'fleet',
@@ -2380,6 +2407,27 @@ export function App() {
             onNavigate={setActiveTab}
             onCreateWorkOrderFromChecklist={handleCreateWorkOrderFromChecklist}
             onOpenBreakdownReport={() => setShowBreakdownReportModal(true)}
+          />
+        )}
+
+        {activeTab === 'pizarra' && (
+          <PizarraView
+            ambulances={ambulances}
+            workOrders={workOrders}
+            checklists={checklists}
+            preventiveSchedules={preventiveSchedules}
+            onNavigateToUnitTab={(tab, ambId) => {
+              setQrSelectedAmbId(ambId);
+              if (
+                currentRole === 'Operador' &&
+                (tab === 'workorders' || tab === 'preventive')
+              ) {
+                setActiveTab('fleet');
+              } else {
+                setActiveTab(tab);
+              }
+            }}
+            onUpdateBoardTasks={handleUpdateBoardTasks}
           />
         )}
 
