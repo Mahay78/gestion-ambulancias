@@ -82,6 +82,7 @@ import {
   LogOut,
   Eye,
   EyeOff,
+  Menu,
 } from 'lucide-react';
 
 type ActiveTab =
@@ -211,6 +212,7 @@ export function App() {
   const [pinSavedMsg, setPinSavedMsg] = useState<string>('');
   const [useFirebaseEmailLogin, setUseFirebaseEmailLogin] = useState<boolean>(false);
   const [firebaseEmail, setFirebaseEmail] = useState<string>('');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const isApplyingRemoteRef = useRef<boolean>(false);
   const hasHydratedRef = useRef<boolean>(false);
 
@@ -1628,19 +1630,167 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col pb-24 lg:pb-6">
+    <div className="min-h-screen bg-slate-100 flex flex-col lg:pl-64 pb-8">
+      {/* Sidebar Fijo en Escritorio (lg+) */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:left-0 bg-slate-900 text-white border-r border-slate-800 z-40 shadow-xl">
+        <div className="px-4 py-4 border-b border-slate-800 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-rose-600 flex items-center justify-center shadow-sm shrink-0">
+            <Activity className="w-6 h-6 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-lg font-extrabold tracking-tight truncate">
+              Ambu-<span className="text-rose-400">lzflota</span>
+            </h1>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              21 Ambulancias • Flota
+            </p>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition ${
+                  isActive
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-950/40 ring-1 ring-blue-400/40'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                }`}
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </span>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${
+                      isActive
+                        ? 'bg-white text-blue-700'
+                        : 'bg-rose-600 text-white'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
+          <div className="flex items-center justify-between">
+            <span>Rol activo:</span>
+            <strong className="text-white">{currentRole}</strong>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Estado:</span>
+            <span className={isOnline ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+              {isOnline ? (realtimeLive ? 'Sync En Vivo' : 'Online PWA') : 'Offline'}
+            </span>
+          </div>
+        </div>
+      </aside>
+
+      {/* Drawer Lateral Deslizable en Móvil y Tablet (< lg) */}
+      {mobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+          <aside className="relative w-72 max-w-[82vw] bg-slate-900 text-white h-full flex flex-col shadow-2xl border-r border-slate-800 z-10">
+            <div className="px-4 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-600 flex items-center justify-center shadow-sm">
+                  <Activity className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold tracking-tight">
+                    Ambu-<span className="text-rose-400">lzflota</span>
+                  </h2>
+                  <p className="text-[10px] text-slate-400 font-semibold">
+                    Menú Principal
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(false)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
+              {navItems.map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setMobileSidebarOpen(false);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className={`w-full px-3.5 py-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition ${
+                      isActive
+                        ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md ring-1 ring-blue-400/40'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      {item.icon}
+                      <span className="truncate">{item.label}</span>
+                    </span>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${
+                          isActive
+                            ? 'bg-white text-blue-700'
+                            : 'bg-rose-600 text-white'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+        </div>
+      )}
+
       {/* Top Navbar adaptada a Móvil, Tablet y Escritorio */}
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 safe-top shadow-md">
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 safe-top shadow-md">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-600 flex items-center justify-center shadow-sm shrink-0">
-              <Activity className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              aria-label="Abrir menú lateral"
+              className="lg:hidden p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 shrink-0"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="lg:hidden w-8 h-8 rounded-xl bg-rose-600 flex items-center justify-center shadow-sm shrink-0">
+              <Activity className="w-4 h-4 text-white" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-lg font-extrabold tracking-tight truncate">
+                <h1 className="lg:hidden text-sm sm:text-lg font-extrabold tracking-tight truncate">
                   Ambu-<span className="text-rose-400">lzflota</span>
                 </h1>
+                <span className="hidden lg:inline-block text-xs font-extrabold text-white">
+                  {navItems.find((n) => n.id === activeTab)?.label || 'Panel General'}
+                </span>
                 <span className="hidden md:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                   21 Ambulancias • Talleres Externos
                 </span>
@@ -1739,78 +1889,7 @@ export function App() {
             </button>
           </div>
         </div>
-
-        {/* Navigation Tabs (Tablet Horizontal y Escritorio >= 1024px) */}
-        <div className="hidden lg:flex max-w-7xl mx-auto px-4 sm:px-6 items-center gap-1.5 overflow-x-auto no-scrollbar pb-2">
-          {navItems.map((item) => {
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shrink-0 transition ${
-                  isActive
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-950/40 ring-1 ring-blue-400/40'
-                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                }`}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      isActive
-                        ? 'bg-white text-blue-700'
-                        : 'bg-slate-700 text-slate-200'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
       </header>
-
-      {/* Bottom Navigation Bar Táctil (Móvil y Tablet Vertical < 1024px) con scroll horizontal suave si hay 7 pestañas */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 z-50 px-1.5 pt-1.5 safe-bottom shadow-2xl">
-        <div className="flex items-center justify-around gap-1 overflow-x-auto no-scrollbar">
-          {navItems.map((item) => {
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`relative flex-1 min-w-[60px] sm:min-w-[84px] flex flex-col items-center justify-center py-2 px-1.5 rounded-xl transition ${
-                  isActive
-                    ? 'bg-gradient-to-b from-blue-500 to-blue-600 text-white font-bold shadow-md shadow-blue-950/50 ring-1 ring-blue-400/40'
-                    : 'text-slate-400 hover:text-slate-200 active:bg-slate-800'
-                }`}
-              >
-                {item.icon}
-                <span className="text-[10px] sm:text-[11px] mt-1 tracking-tight truncate max-w-full">
-                  {item.shortLabel}
-                </span>
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span
-                    className={`absolute top-1 right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold flex items-center justify-center ${
-                      isActive
-                        ? 'bg-white text-blue-700'
-                        : 'bg-rose-600 text-white'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
 
       {/* Main Content */}
       <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 flex-1 space-y-4">
