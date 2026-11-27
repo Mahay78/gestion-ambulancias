@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Ambulance,
   AmbulanceStatus,
@@ -45,7 +45,17 @@ import {
   DEFAULT_FIREBASE_CONFIG,
   pushFleetStateToFirebase,
   pullFleetStateFromFirebase,
+  subscribeFleetRealtime,
+  ensureFirebaseAuthSession,
+  signInFirebaseWithEmail,
+  signOutFirebase,
 } from './utils/firebaseSync';
+import {
+  verifyLocalAccessPassword,
+  verifyManagerPin,
+  updateManagerPin,
+} from './utils/security';
+import { checkAndNotifyCriticalExpiries } from './utils/notifications';
 import { ensureAmbulanceDocuments } from './utils/expiryAlerts';
 import {
   LayoutDashboard,
@@ -164,11 +174,6 @@ const getNextWorkOrderCode = (existingOrders: WorkOrder[]): string => {
 
 const AUTH_SESSION_KEY = `${STORAGE_KEY}_authenticated`;
 
-const verifyAccessPassword = async (input: string): Promise<boolean> => {
-  const normalized = input.trim().toLowerCase();
-  return normalized === 'mahay1978';
-};
-
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
@@ -197,6 +202,17 @@ export function App() {
   const [cloudConfig, setCloudConfig] = useState(() => getCloudSyncConfig());
   const [firebaseStatusMsg, setFirebaseStatusMsg] = useState<string>('');
   const [isSyncingFirebase, setIsSyncingFirebase] = useState<boolean>(false);
+  const [realtimeLive, setRealtimeLive] = useState<boolean>(false);
+  const [qrSelectedAmbId, setQrSelectedAmbId] = useState<string | undefined>(undefined);
+  const [showPinModal, setShowPinModal] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<string>('');
+  const [newPinInput, setNewPinInput] = useState<string>('');
+  const [pinSavedMsg, setPinSavedMsg] = useState<string>('');
+  const [useFirebaseEmailLogin, setUseFirebaseEmailLogin] = useState<boolean>(false);
+  const [firebaseEmail, setFirebaseEmail] = useState<string>('');
+  const isApplyingRemoteRef = useRef<boolean>(false);
+  const hasHydratedRef = useRef<boolean>(false);
 
   const [ambulances, setAmbulances] = useState<Ambulance[]>(() =>
     hydrateAmbulancesWithFullFleet(
@@ -251,6 +267,151 @@ export function App() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Deep link desde etiquetas QR (?amb=AMB-01)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ambCode = params.get('amb');
+      if (ambCode) {
+        const found = ambulances.find(
+          (a) => a.code.toLowerCase() === ambCode.trim().toLowerCase()
+        );
+        if (found) {
+          setQrSelectedAmbId(found.id);
+          setActiveTab('fleet');
+        }
+      }
+    } catch {
+      // ignorar
+    }
+  }, [isAuthenticated]);
+
+  // Notificación diaria PWA si existen vencimientos críticos (<=15d, <=7d o vencidos)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      checkAndNotifyCriticalExpiries(ambulances, false);
+    }
+  }, [isAuthenticated]);
+
+  // Suscripción en tiempo real a Firestore (onSnapshot)
+  useEffect(() => {
+    if (!isAuthenticated || !cloudConfig.enabled || !isOnline) {
+      setRealtimeLive(false);
+      return;
+    }
+
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+
+    const startRealtime = async () => {
+      const pid =
+        cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId;
+      const key = cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey;
+      await ensureFirebaseAuthSession(pid, key);
+      if (cancelled) return;
+
+      unsubscribe = subscribeFleetRealtime(
+        (partial, updatedAt) => {
+          isApplyingRemoteRef.current = true;
+          if (partial.ambulances) {
+            setAmbulances(
+              hydrateAmbulancesWithFullFleet(partial.ambulances as Ambulance[])
+            );
+          }
+          if (partial.workshops) {
+            setWorkshops(partial.workshops as ExternalWorkshop[]);
+          }
+          if (partial.preventiveSchedules) {
+            setPreventiveSchedules(
+              partial.preventiveSchedules as PreventiveSchedule[]
+            );
+          }
+          if (partial.checklists) {
+            setChecklists(partial.checklists as FleetChecklist[]);
+          }
+          if (partial.workOrders) {
+            setWorkOrders(hydrateWorkOrders(partial.workOrders as WorkOrder[]));
+          }
+          if (partial.spareParts) {
+            setSpareParts(hydrateSpareParts(partial.spareParts as SparePart[]));
+          }
+          if (partial.stockMovements) {
+            setStockMovements(partial.stockMovements as StockMovement[]);
+          }
+          setRealtimeLive(true);
+          setFirebaseStatusMsg(
+            `🔄 Cambio remoto sincronizado (${new Date(updatedAt).toLocaleTimeString('es-ES')})`
+          );
+          setTimeout(() => {
+            isApplyingRemoteRef.current = false;
+          }, 300);
+        },
+        (err) => {
+          setRealtimeLive(false);
+          setFirebaseStatusMsg(`⚠️ Sync en tiempo real: ${err}`);
+        },
+        pid,
+        key
+      );
+      setRealtimeLive(true);
+    };
+
+    startRealtime();
+
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline]);
+
+  // Auto-push con debounce a Firebase cuando hay cambios locales
+  useEffect(() => {
+    if (!isAuthenticated || !cloudConfig.enabled || !isOnline) return;
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+    if (isApplyingRemoteRef.current) return;
+
+    const timer = setTimeout(() => {
+      const nowIso = new Date().toISOString();
+      pushFleetStateToFirebase(
+        {
+          updatedAt: nowIso,
+          updatedByRole: currentRole,
+          ambulances,
+          workshops,
+          preventiveSchedules,
+          checklists,
+          workOrders,
+          spareParts,
+          stockMovements,
+        },
+        cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
+        cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey
+      ).then((res) => {
+        if (res.ok) {
+          setRealtimeLive(true);
+        }
+      });
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [
+    isAuthenticated,
+    cloudConfig.enabled,
+    isOnline,
+    ambulances,
+    workshops,
+    preventiveSchedules,
+    checklists,
+    workOrders,
+    spareParts,
+    stockMovements,
+  ]);
 
   // Persistencia automática, control de cuota y snapshot de backup automático en LocalStorage
   useEffect(() => {
@@ -900,11 +1061,23 @@ export function App() {
         | 'exitDate'
         | 'workshopReport'
         | 'warranty'
+        | 'partsDeliverySignature'
+        | 'partsDeliveryDate'
+        | 'partsReceivedBy'
       >
     >
   ) => {
     setWorkOrders((prev) =>
       prev.map((wo) => (wo.id === woId ? { ...wo, ...patch } : wo))
+    );
+  };
+
+  const handleUpdateBodyAndVisualState = (
+    ambulanceId: string,
+    patch: Partial<Pick<Ambulance, 'bodyDamages' | 'tires' | 'batteries'>>
+  ) => {
+    setAmbulances((prev) =>
+      prev.map((a) => (a.id === ambulanceId ? { ...a, ...patch } : a))
     );
   };
 
@@ -1036,7 +1209,7 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ambufleet_copia_seguridad_${
+    a.download = `ambu-lz_copia_seguridad_${
       new Date().toISOString().split('T')[0]
     }.json`;
     a.click();
@@ -1256,7 +1429,30 @@ export function App() {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const valid = await verifyAccessPassword(passwordInput);
+    let valid = false;
+    if (useFirebaseEmailLogin && firebaseEmail.trim()) {
+      const res = await signInFirebaseWithEmail(
+        firebaseEmail,
+        passwordInput,
+        cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
+        cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey
+      );
+      if (res.ok) {
+        valid = true;
+      } else {
+        setAuthError(res.error || 'Error de autenticación en Firebase.');
+        return;
+      }
+    } else {
+      valid = await verifyLocalAccessPassword(passwordInput);
+      if (valid) {
+        await ensureFirebaseAuthSession(
+          cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
+          cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey
+        );
+      }
+    }
+
     if (valid) {
       setIsAuthenticated(true);
       setAuthError('');
@@ -1277,6 +1473,10 @@ export function App() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setPasswordInput('');
+    signOutFirebase(
+      cloudConfig.firebaseProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
+      cloudConfig.firebaseApiKey || DEFAULT_FIREBASE_CONFIG.apiKey
+    );
     try {
       sessionStorage.removeItem(AUTH_SESSION_KEY);
       localStorage.removeItem(AUTH_SESSION_KEY);
@@ -1295,7 +1495,7 @@ export function App() {
             </div>
             <div>
               <h1 className="text-lg font-extrabold text-slate-900">
-                AmbuFleet <span className="text-rose-600">Flota</span>
+                Ambu-<span className="text-rose-600">lz</span>
               </h1>
               <p className="text-xs text-slate-500">
                 Gestión de 21 Ambulancias y Talleres Externos
@@ -1304,6 +1504,53 @@ export function App() {
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
+            <div className="flex rounded-xl bg-slate-100 p-1 text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setUseFirebaseEmailLogin(false);
+                  setAuthError('');
+                }}
+                className={`flex-1 py-1.5 rounded-lg transition ${
+                  !useFirebaseEmailLogin
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500'
+                }`}
+              >
+                Clave Flota
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUseFirebaseEmailLogin(true);
+                  setAuthError('');
+                }}
+                className={`flex-1 py-1.5 rounded-lg transition ${
+                  useFirebaseEmailLogin
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500'
+                }`}
+              >
+                Firebase Auth (Email)
+              </button>
+            </div>
+
+            {useFirebaseEmailLogin && (
+              <div>
+                <label className="font-bold text-slate-700 block mb-1.5">
+                  Correo Electrónico (Firebase)
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={firebaseEmail}
+                  onChange={(e) => setFirebaseEmail(e.target.value)}
+                  placeholder="encargado@flota.es"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+            )}
+
             <div>
               <label className="font-bold text-slate-700 block mb-1.5 flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-blue-600" />
@@ -1372,7 +1619,7 @@ export function App() {
               type="submit"
               className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition"
             >
-              Entrar a AmbuFleet
+              Entrar a Ambu-lz
             </button>
           </form>
         </div>
@@ -1392,7 +1639,7 @@ export function App() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-lg font-extrabold tracking-tight truncate">
-                  AmbuFleet <span className="text-rose-400">Flota</span>
+                  Ambu-<span className="text-rose-400">lz</span>
                 </h1>
                 <span className="hidden md:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                   21 Ambulancias • Talleres Externos
@@ -1412,6 +1659,12 @@ export function App() {
                 value={currentRole}
                 onChange={(e) => {
                   const nextRole = e.target.value as UserRole;
+                  if (nextRole === 'Encargado' && currentRole === 'Operador') {
+                    setPinInput('');
+                    setPinError('');
+                    setShowPinModal(true);
+                    return;
+                  }
                   setCurrentRole(nextRole);
                   if (
                     nextRole === 'Operador' &&
@@ -1448,7 +1701,9 @@ export function App() {
               {isOnline ? (
                 <>
                   <Wifi className="w-3.5 h-3.5" />
-                  <span className="hidden xl:inline">Online PWA</span>
+                  <span className="hidden xl:inline">
+                    {realtimeLive ? 'Sync En Vivo' : 'Online PWA'}
+                  </span>
                 </>
               ) : (
                 <>
@@ -1611,12 +1866,14 @@ export function App() {
             preventiveSchedules={preventiveSchedules}
             stockMovements={stockMovements}
             workshops={workshops}
+            initialSelectedAmbulanceId={qrSelectedAmbId}
             onAddAmbulance={handleAddAmbulance}
             onDeleteAmbulance={handleDeleteAmbulance}
             onUpdateStatus={handleUpdateAmbulanceStatus}
             onUpdateMileage={handleUpdateMileage}
             onUpdateLegalDates={handleUpdateLegalDates}
             onUpdateVehicleDocument={handleUpdateVehicleDocument}
+            onUpdateBodyAndVisualState={handleUpdateBodyAndVisualState}
             onRestockVehiclePart={handleRestockVehiclePart}
             onUpdateVehiclePartQty={handleUpdateVehiclePartQty}
             onAddPartToVehicleOnboard={handleAddPartToVehicleOnboard}
@@ -1640,6 +1897,8 @@ export function App() {
           <ChecklistView
             ambulances={ambulances}
             checklists={checklists}
+            workOrders={workOrders}
+            workshops={workshops}
             onSubmitChecklist={handleSubmitChecklist}
             onCreateWorkOrderFromChecklist={handleCreateWorkOrderFromChecklist}
           />
@@ -1855,6 +2114,120 @@ export function App() {
                 )}
               </div>
             </div>
+
+            {/* Configuración del PIN rápido de 4 dígitos para el rol Encargado */}
+            {currentRole === 'Encargado' && (
+              <div className="pt-3 border-t border-slate-200 space-y-2 text-xs">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-blue-600" />
+                  PIN de Seguridad Rol Encargado (4 dígitos)
+                </span>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    maxLength={4}
+                    inputMode="numeric"
+                    value={newPinInput}
+                    onChange={(e) => {
+                      setNewPinInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                      setPinSavedMsg('');
+                    }}
+                    placeholder="Nuevo PIN (4 dígitos, por defecto 1978)"
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 font-mono font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await updateManagerPin(newPinInput);
+                      if (ok) {
+                        setNewPinInput('');
+                        setPinSavedMsg('✅ PIN de Encargado actualizado.');
+                      } else {
+                        setPinSavedMsg('⚠️ Introduce exactamente 4 dígitos numéricos.');
+                      }
+                    }}
+                    className="px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold"
+                  >
+                    Guardar PIN
+                  </button>
+                </div>
+                {pinSavedMsg && (
+                  <p className="text-[11px] font-semibold text-slate-700">{pinSavedMsg}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal PIN Rápido de Seguridad para cambiar a Rol Encargado */}
+      {showPinModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xs w-full p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-blue-600" />
+                PIN de Encargado
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPinModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600">
+              Introduce el PIN de 4 dígitos para activar el rol{' '}
+              <strong>Encargado</strong> (por defecto: <code className="font-mono">1978</code>).
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const valid = await verifyManagerPin(pinInput);
+                if (valid) {
+                  setCurrentRole('Encargado');
+                  setShowPinModal(false);
+                  setPinInput('');
+                  setPinError('');
+                } else {
+                  setPinError('PIN incorrecto. Debe tener 4 dígitos válidos.');
+                }
+              }}
+              className="space-y-3 text-xs"
+            >
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                autoFocus
+                value={pinInput}
+                onChange={(e) => {
+                  setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                  if (pinError) setPinError('');
+                }}
+                placeholder="••••"
+                className="w-full text-center tracking-[0.6em] text-lg font-extrabold px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50"
+              />
+              {pinError && (
+                <p className="text-rose-600 font-bold text-center">{pinError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                >
+                  Desbloquear
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

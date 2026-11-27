@@ -3,9 +3,12 @@ import {
   Ambulance,
   ChecklistItem,
   ChecklistItemStatus,
+  ExternalWorkshop,
   FleetChecklist,
   MissingVehiclePartReport,
+  WorkOrder,
 } from '../types';
+import { detectActiveWarranties } from '../utils/warrantyDetector';
 import { DEFAULT_CHECKLIST_TEMPLATE } from '../initialData';
 import { SignaturePad } from './SignaturePad';
 import { PlateScannerModal } from './PlateScannerModal';
@@ -36,6 +39,8 @@ import {
 interface ChecklistViewProps {
   ambulances: Ambulance[];
   checklists: FleetChecklist[];
+  workOrders?: WorkOrder[];
+  workshops?: ExternalWorkshop[];
   onSubmitChecklist: (
     checklist: Omit<FleetChecklist, 'id'>,
     autoCreateWorkOrder: boolean,
@@ -47,6 +52,8 @@ interface ChecklistViewProps {
 export const ChecklistView: React.FC<ChecklistViewProps> = ({
   ambulances,
   checklists,
+  workOrders = [],
+  workshops = [],
   onSubmitChecklist,
   onCreateWorkOrderFromChecklist,
 }) => {
@@ -362,6 +369,30 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
                 </select>
               </div>
             </div>
+
+            {selectedAmb &&
+              (() => {
+                const warranties = detectActiveWarranties(
+                  selectedAmb.id,
+                  mileageInput || selectedAmb.mileage,
+                  workOrders,
+                  workshops
+                );
+                if (warranties.length === 0) return null;
+                const latest = warranties[0];
+                return (
+                  <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-amber-900">
+                      <strong>Garantía vigente en {selectedAmb.code}:</strong> La orden{' '}
+                      <strong>{latest.workOrder.code}</strong> ({latest.workOrder.title}) en{' '}
+                      <strong>{latest.workshop?.name || 'taller externo'}</strong> tiene
+                      garantía activa ({latest.warrantyText}, {latest.daysRemaining} días
+                      restantes). Si detectas reincidencia, reclama sin cargo.
+                    </div>
+                  </div>
+                );
+              })()}
           </div>
 
           {/* 2. Verificación del Stock de Piezas a Bordo del Vehículo */}

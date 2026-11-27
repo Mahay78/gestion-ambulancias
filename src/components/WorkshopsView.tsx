@@ -19,6 +19,9 @@ import {
   Check,
   X,
   Search,
+  BarChart3,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface WorkshopsViewProps {
@@ -153,6 +156,100 @@ export const WorkshopsView: React.FC<WorkshopsViewProps> = ({
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Estadísticas Operativas de Talleres Externos (Sin Costes) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-blue-600" />
+            Estadísticas Operativas de Talleres Externos (Sin Costes)
+          </h3>
+          <span className="text-[11px] text-slate-500 font-semibold">
+            Comparativa por tiempo medio de estancia (días parado) y volumen de órdenes
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {workshops.map((ws) => {
+            const orders = workOrders.filter((wo) => wo.workshopId === ws.id);
+            const closedOrders = orders.filter(
+              (wo) => wo.status === 'Reparada' || wo.status === 'Cerrada'
+            );
+            const activeOrdersCount = orders.filter(
+              (wo) => wo.status !== 'Cerrada'
+            ).length;
+
+            const daysList = orders.map((wo) => {
+              const start = new Date(`${wo.entryDate || wo.createdAt}T00:00:00`);
+              const end = wo.exitDate
+                ? new Date(`${wo.exitDate}T00:00:00`)
+                : new Date();
+              const diff = Math.max(
+                0,
+                Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24))
+              );
+              return isNaN(diff) ? 0 : diff;
+            });
+
+            const avgDays =
+              daysList.length > 0
+                ? (daysList.reduce((a, b) => a + b, 0) / daysList.length).toFixed(1)
+                : '0.0';
+            const completionRate =
+              orders.length > 0
+                ? Math.round((closedOrders.length / orders.length) * 100)
+                : 0;
+
+            return (
+              <div
+                key={`stat-${ws.id}`}
+                className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-extrabold text-slate-900 truncate">
+                    {ws.name}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[10px] shrink-0">
+                    {orders.length} órdenes
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 text-center">
+                  <div className="bg-white rounded-lg p-1.5 border border-slate-200">
+                    <div className="text-[10px] text-slate-500 flex items-center justify-center gap-0.5">
+                      <Clock className="w-3 h-3 text-amber-600" />
+                      Media
+                    </div>
+                    <div className="font-extrabold text-slate-900">{avgDays}d</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-1.5 border border-slate-200">
+                    <div className="text-[10px] text-slate-500">Activas</div>
+                    <div className="font-extrabold text-rose-600">
+                      {activeOrdersCount}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-1.5 border border-slate-200">
+                    <div className="text-[10px] text-slate-500 flex items-center justify-center gap-0.5">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      Cierre
+                    </div>
+                    <div className="font-extrabold text-emerald-700">
+                      {completionRate}%
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full"
+                    style={{ width: `${completionRate}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

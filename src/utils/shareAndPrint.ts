@@ -195,7 +195,7 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px;">
         <div>
-          <h1 style="font-size:18px;margin:0;">AMBUFLEET MECÁNICA — PARTE DE INSPECCIÓN A TALLER</h1>
+          <h1 style="font-size:18px;margin:0;">AMBU-LZ — PARTE DE INSPECCIÓN A TALLER</h1>
           <p style="font-size:12px;color:#475569;margin:4px 0 0;">Checklist del Responsable de Flota y Auditoría de Stock del Vehículo</p>
         </div>
         <div style="text-align:right;font-size:12px;">
@@ -325,7 +325,7 @@ export const printWorkOrderReport = (
           <h1 style="font-size:18px;margin:0;">ORDEN DE REPARACIÓN EXTERNA — ${escapeHtml(
             wo.code
           )}</h1>
-          <p style="font-size:12px;color:#475569;margin:4px 0 0;">AmbuFleet • Gestión de Flota de Ambulancias</p>
+          <p style="font-size:12px;color:#475569;margin:4px 0 0;">Ambu-lz • Gestión de Flota de Ambulancias</p>
         </div>
         <div style="text-align:right;font-size:12px;">
           <strong>Estado:</strong> ${escapeHtml(wo.status)}<br/>
@@ -415,6 +415,127 @@ export const printWorkOrderReport = (
   win.document.close();
 };
 
+export const printPartsDeliveryNote = (
+  wo: WorkOrder,
+  amb?: Ambulance,
+  ws?: ExternalWorkshop
+) => {
+  const win = window.open('', '_blank', 'width=800,height=900');
+  if (!win) return;
+
+  const safeSig =
+    wo.partsDeliverySignature && wo.partsDeliverySignature.startsWith('data:image/')
+      ? wo.partsDeliverySignature
+      : '';
+
+  const rowsHtml =
+    wo.partsUsed.length > 0
+      ? wo.partsUsed
+          .map(
+            (p, idx) => `
+          <tr>
+            <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;">${idx + 1}</td>
+            <td style="padding:8px;border:1px solid #cbd5e1;font-family:monospace;font-weight:bold;">${escapeHtml(
+              p.sku
+            )}</td>
+            <td style="padding:8px;border:1px solid #cbd5e1;">${escapeHtml(p.partName)}</td>
+            <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;font-weight:bold;">${
+              p.quantity
+            } uds.</td>
+          </tr>`
+          )
+          .join('')
+      : `<tr><td colspan="4" style="padding:12px;border:1px solid #cbd5e1;text-align:center;">Sin repuestos registrados en esta orden</td></tr>`;
+
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Albarán Entrega Repuestos - ${escapeHtml(wo.code)}</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; padding: 28px; max-width: 780px; margin: 0 auto; }
+        .no-print { margin-bottom: 16px; display: flex; justify-content: flex-end; }
+        .btn { background: #0f172a; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="no-print">
+        <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      </div>
+      <div style="border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end;">
+        <div>
+          <h1 style="margin:0;font-size:20px;">ALBARÁN DE ENTREGA DE REPUESTOS PROPIOS</h1>
+          <p style="margin:4px 0 0;font-size:12px;color:#475569;">Ambu-lz Gestión de Flota (Material de almacén propio sin cargo económico)</p>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:16px;font-weight:900;color:#e11d48;">${escapeHtml(wo.code)}</div>
+          <div style="font-size:11px;color:#64748b;">Fecha entrega: ${escapeHtml(
+            wo.partsDeliveryDate || new Date().toISOString().split('T')[0]
+          )}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;font-size:12px;">
+        <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px;">
+          <div style="font-weight:800;color:#475569;margin-bottom:4px;">VEHÍCULO DESTINO</div>
+          <div><strong>Unidad:</strong> ${escapeHtml(amb?.code || '')} — ${escapeHtml(
+            amb?.plate || ''
+          )}</div>
+          <div><strong>Modelo:</strong> ${escapeHtml(amb?.brand || '')} ${escapeHtml(
+            amb?.model || ''
+          )}</div>
+          <div><strong>Km entrada:</strong> ${wo.mileageAtEntry.toLocaleString()} km</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px;">
+          <div style="font-weight:800;color:#475569;margin-bottom:4px;">TALLER EXTERNO RECEPTOR</div>
+          <div><strong>Taller:</strong> ${escapeHtml(ws?.name || 'Por asignar')}</div>
+          <div><strong>Contacto:</strong> ${escapeHtml(ws?.contactPerson || '—')} (${escapeHtml(
+            ws?.phone || '—'
+          )})</div>
+          <div><strong>Orden:</strong> ${escapeHtml(wo.title)}</div>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:22px;">
+        <thead>
+          <tr style="background:#0f172a;color:#fff;">
+            <th style="padding:8px;border:1px solid #0f172a;width:45px;">#</th>
+            <th style="padding:8px;border:1px solid #0f172a;text-align:left;width:130px;">SKU</th>
+            <th style="padding:8px;border:1px solid #0f172a;text-align:left;">Descripción del Repuesto</th>
+            <th style="padding:8px;border:1px solid #0f172a;width:90px;">Cantidad</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:11px;">
+        <div style="border:1px solid #cbd5e1;border-radius:8px;padding:10px;">
+          <p style="margin:0 0 6px;font-weight:bold;">Entregado por (Flota):</p>
+          <p style="margin:0 0 8px;color:#475569;">${escapeHtml(
+            wo.partsDeliveredBy || wo.reportedBy || 'Encargado de Flota'
+          )}</p>
+          <div style="height:55px;border-bottom:1px dashed #94a3b8;"></div>
+        </div>
+        <div style="border:1px solid #cbd5e1;border-radius:8px;padding:10px;">
+          <p style="margin:0 0 6px;font-weight:bold;">Recibido conforme (Taller Externo):</p>
+          <p style="margin:0 0 8px;color:#475569;">${escapeHtml(
+            wo.partsReceivedBy || ws?.contactPerson || ws?.name || 'Receptor Taller'
+          )}</p>
+          ${
+            safeSig
+              ? `<img src="${safeSig}" style="height:55px;object-fit:contain;" />`
+              : `<div style="height:55px;border-bottom:1px dashed #94a3b8;"></div>`
+          }
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+  win.document.close();
+};
+
 export const exportFleetAndStockToCSV = (
   ambulances: Ambulance[],
   spareParts: SparePart[]
@@ -441,7 +562,7 @@ export const exportFleetAndStockToCSV = (
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ambufleet_flota_y_stock_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = `ambu-lz_flota_y_stock_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 };

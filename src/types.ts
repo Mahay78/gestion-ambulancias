@@ -30,6 +30,53 @@ export interface VehicleOnboardPart {
   notes?: string;
 }
 
+export type BodyView =
+  | 'frontal'
+  | 'trasera'
+  | 'lateral_izq'
+  | 'lateral_der'
+  | 'techo';
+
+export type BodyDamageType =
+  | 'Roce'
+  | 'Golpe'
+  | 'Luna / Cristal'
+  | 'Óptica / Prioritario'
+  | 'Otro';
+
+export interface BodyDamageMark {
+  id: string;
+  view: BodyView;
+  xPercent: number;
+  yPercent: number;
+  type: BodyDamageType;
+  moment: 'Campa' | 'Antes de taller' | 'Después de taller';
+  note: string;
+  date: string;
+  repaired?: boolean;
+}
+
+export type TirePosition = 'FL' | 'FR' | 'RL' | 'RR' | 'SPARE';
+
+export interface TireStatus {
+  position: TirePosition;
+  label: string;
+  treadDepthMm: number;
+  pressureBar: number;
+  condition: 'OK' | 'Desgaste' | 'Crítico (<3mm)';
+  lastCheckDate: string;
+}
+
+export interface DualBatteryStatus {
+  starterVoltage: number;
+  starterStatus: 'OK' | 'Baja (<12.3V)' | 'Crítica';
+  auxVoltage: number;
+  auxStatus: 'OK' | 'Baja (<12.2V)' | 'Crítica';
+  auxType: string;
+  lastCheckDate: string;
+  notes?: string;
+}
+
 export interface Ambulance {
   id: string;
   code: string; // ej. AMB-01 .. AMB-21
@@ -51,6 +98,9 @@ export interface Ambulance {
   lastServiceMileage: number;
   notes: string;
   onboardParts: VehicleOnboardPart[];
+  bodyDamages?: BodyDamageMark[];
+  tires?: TireStatus[];
+  batteries?: DualBatteryStatus;
 }
 
 export type PreventiveCategory =
@@ -174,6 +224,10 @@ export interface WorkOrder {
   photos?: string[];
   inspectorSignature?: string;
   workshopConformitySignature?: string;
+  partsDeliverySignature?: string;
+  partsDeliveryDate?: string;
+  partsDeliveredBy?: string;
+  partsReceivedBy?: string;
 }
 
 export type PartCategory =

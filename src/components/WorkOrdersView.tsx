@@ -14,7 +14,9 @@ import { compressImageFile } from '../utils/imageCompression';
 import {
   shareWorkOrderViaWhatsApp,
   printWorkOrderReport,
+  printPartsDeliveryNote,
 } from '../utils/shareAndPrint';
+import { detectActiveWarranties } from '../utils/warrantyDetector';
 import {
   Plus,
   PackagePlus,
@@ -27,6 +29,8 @@ import {
   Building2,
   Clock,
   ShieldCheck,
+  AlertTriangle,
+  FileCheck2,
 } from 'lucide-react';
 
 interface WorkOrdersViewProps {
@@ -48,6 +52,9 @@ interface WorkOrdersViewProps {
         | 'exitDate'
         | 'workshopReport'
         | 'warranty'
+        | 'partsDeliverySignature'
+        | 'partsDeliveryDate'
+        | 'partsReceivedBy'
       >
     >
   ) => void;
@@ -95,6 +102,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('Todas');
   const [showNewModal, setShowNewModal] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [showPartsDeliveryModal, setShowPartsDeliveryModal] = useState(false);
+  const [partsReceivedByInput, setPartsReceivedByInput] = useState('');
 
   // Selector para suministrar pieza propia a la Orden Externa activa
   const [partIdToAdd, setPartIdToAdd] = useState<string>(
@@ -380,6 +389,21 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                           <Printer className="w-3.5 h-3.5" />
                           Volante Taller PDF
                         </button>
+                        {selectedWo.partsUsed.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPartsReceivedByInput(
+                                selectedWo.partsReceivedBy || ws?.contactPerson || ''
+                              );
+                              setShowPartsDeliveryModal(true);
+                            }}
+                            className="px-3 py-2 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-semibold flex items-center gap-1.5"
+                          >
+                            <FileCheck2 className="w-3.5 h-3.5" />
+                            Albarán Repuestos ({selectedWo.partsDeliverySignature ? 'Firmado' : 'Firmar / PDF'})
+                          </button>
+                        )}
                         <div>
                           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
                             Estado (Reportada → Cerrada)
@@ -866,6 +890,49 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 </div>
               </div>
 
+              {(() => {
+                const targetAmb = ambulances.find((a) => a.id === newWo.ambulanceId);
+                const warranties = detectActiveWarranties(
+                  newWo.ambulanceId,
+                  targetAmb?.mileage || 0,
+                  workOrders,
+                  workshops
+                );
+                if (warranties.length === 0) return null;
+                const latest = warranties[0];
+                return (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-extrabold text-amber-900 flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        ¡Garantía Vigente Detectada en {targetAmb?.code}!
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewWo((prev) => ({
+                            ...prev,
+                            workshopId: latest.workOrder.workshopId,
+                            title: `Reclamación Garantía (${latest.workOrder.code}): ${latest.workOrder.title}`,
+                            description: `Posible reincidencia cubierta por garantía (${latest.warrantyText}) de la orden ${latest.workOrder.code} realizada el ${latest.baseDate}.`,
+                          }))
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shrink-0"
+                      >
+                        Reclamar Garantía
+                      </button>
+                    </div>
+                    <p className="text-amber-800">
+                      Orden <strong>{latest.workOrder.code}</strong> en{' '}
+                      <strong>{latest.workshop?.name || 'Taller externo'}</strong> ({latest.baseDate}):{' '}
+                      <em>{latest.workOrder.title}</em> — Garantía:{' '}
+                      <strong>{latest.warrantyText}</strong> ({latest.daysRemaining} días restantes
+                      {latest.kmRemaining !== null ? ` / ${latest.kmRemaining.toLocaleString()} km` : ''}).
+                    </p>
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
@@ -1010,6 +1077,106 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Albarán de Entrega de Repuestos Propios (Firma + PDF) */}
+      {showPartsDeliveryModal && selectedWo && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+            <div className="px-5 py-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Albarán de Entrega de Repuestos ({selectedWo.code})
+                </h3>
+                <p className="text-[11px] text-slate-600">
+                  Firma del taller receptor para justificar el material propio entregado
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPartsDeliveryModal(false)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 space-y-1">
+                <div className="font-bold text-slate-700">
+                  Piezas incluidas ({selectedWo.partsUsed.length}):
+                </div>
+                {selectedWo.partsUsed.map((p, i) => (
+                  <div key={i} className="flex justify-between text-slate-600">
+                    <span>
+                      {p.partName} ({p.sku})
+                    </span>
+                    <strong className="text-slate-900">x{p.quantity}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Nombre del receptor en taller externo
+                </label>
+                <input
+                  type="text"
+                  value={partsReceivedByInput}
+                  onChange={(e) => setPartsReceivedByInput(e.target.value)}
+                  placeholder="Ej. Jefe de taller / Recepción..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                />
+              </div>
+
+              <SignaturePad
+                label="Firma de Recepción Conforme (Taller)"
+                value={selectedWo.partsDeliverySignature}
+                onChange={(sig: string) => {
+                  onUpdateWorkOrderDetails(selectedWo.id, {
+                    partsDeliverySignature: sig,
+                    partsDeliveryDate: sig ? new Date().toISOString().split('T')[0] : '',
+                    partsReceivedBy: partsReceivedByInput.trim() || 'Receptor Taller',
+                  });
+                }}
+              />
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPartsDeliveryModal(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const amb = ambulances.find(
+                      (a) => a.id === selectedWo.ambulanceId
+                    );
+                    const ws = workshops.find(
+                      (w) => w.id === selectedWo.workshopId
+                    );
+                    printPartsDeliveryNote(
+                      {
+                        ...selectedWo,
+                        partsReceivedBy:
+                          partsReceivedByInput.trim() ||
+                          selectedWo.partsReceivedBy,
+                      },
+                      amb,
+                      ws
+                    );
+                  }}
+                  className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir / PDF Albarán
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

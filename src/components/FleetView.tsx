@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Ambulance,
   AmbulanceStatus,
@@ -36,8 +36,12 @@ import {
   ClipboardCheck,
   CalendarClock,
   Package,
+  QrCode,
 } from 'lucide-react';
 import { PlateScannerModal } from './PlateScannerModal';
+import { QrLabelsModal } from './QrLabelsModal';
+import { BodyDamageMap } from './BodyDamageMap';
+import { TiresAndBatteriesPanel } from './TiresAndBatteriesPanel';
 
 interface FleetViewProps {
   ambulances: Ambulance[];
@@ -47,6 +51,7 @@ interface FleetViewProps {
   preventiveSchedules?: PreventiveSchedule[];
   stockMovements?: StockMovement[];
   workshops?: ExternalWorkshop[];
+  initialSelectedAmbulanceId?: string;
   onAddAmbulance: (amb: Omit<Ambulance, 'id'>) => void;
   onDeleteAmbulance: (id: string) => void;
   onUpdateStatus: (id: string, status: AmbulanceStatus) => void;
@@ -58,6 +63,10 @@ interface FleetViewProps {
     insuranceExpiry: string
   ) => void;
   onUpdateVehicleDocument?: (ambulanceId: string, doc: VehicleDocument) => void;
+  onUpdateBodyAndVisualState?: (
+    ambulanceId: string,
+    patch: Partial<Pick<Ambulance, 'bodyDamages' | 'tires' | 'batteries'>>
+  ) => void;
   onRestockVehiclePart: (ambulanceId: string, partId: string) => void;
   onUpdateVehiclePartQty: (
     ambulanceId: string,
@@ -82,18 +91,29 @@ export const FleetView: React.FC<FleetViewProps> = ({
   preventiveSchedules = [],
   stockMovements = [],
   workshops = [],
+  initialSelectedAmbulanceId,
   onAddAmbulance,
   onDeleteAmbulance,
   onUpdateStatus,
   onUpdateMileage,
   onUpdateLegalDates,
   onUpdateVehicleDocument,
+  onUpdateBodyAndVisualState,
   onRestockVehiclePart,
   onUpdateVehiclePartQty,
   onAddPartToVehicleOnboard,
   onRemovePartFromVehicleOnboard,
 }) => {
-  const [selectedAmbId, setSelectedAmbId] = useState<string>(ambulances[0]?.id || '');
+  const [selectedAmbId, setSelectedAmbId] = useState<string>(
+    initialSelectedAmbulanceId || ambulances[0]?.id || ''
+  );
+  const [showQrLabels, setShowQrLabels] = useState(false);
+
+  useEffect(() => {
+    if (initialSelectedAmbulanceId) {
+      setSelectedAmbId(initialSelectedAmbulanceId);
+    }
+  }, [initialSelectedAmbulanceId]);
   const [filterStatus, setFilterStatus] = useState<string>('Todas');
   const [historyFilter, setHistoryFilter] = useState<
     'all' | 'orders' | 'incidents' | 'preventive' | 'documents' | 'stock'
@@ -260,6 +280,14 @@ export const FleetView: React.FC<FleetViewProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => setShowQrLabels(true)}
+            className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+          >
+            <QrCode className="w-4 h-4" />
+            Etiquetas QR (A4)
+          </button>
+          <button
+            type="button"
             onClick={() => setShowPlateScanner(true)}
             className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
           >
@@ -275,6 +303,13 @@ export const FleetView: React.FC<FleetViewProps> = ({
           </button>
         </div>
       </div>
+
+      {showQrLabels && (
+        <QrLabelsModal
+          ambulances={ambulances}
+          onClose={() => setShowQrLabels(false)}
+        />
+      )}
 
       {showPlateScanner && (
         <PlateScannerModal
@@ -1017,6 +1052,30 @@ export const FleetView: React.FC<FleetViewProps> = ({
                     ))}
                   </div>
                 </div>
+
+                {/* Mapa Visual 360° de Carrocería + Panel Neumáticos y Doble Batería */}
+                {onUpdateBodyAndVisualState && (
+                  <div className="mt-6 pt-5 border-t border-slate-100 space-y-4">
+                    <BodyDamageMap
+                      damages={selectedAmb.bodyDamages || []}
+                      onChange={(updated) =>
+                        onUpdateBodyAndVisualState(selectedAmb.id, {
+                          bodyDamages: updated,
+                        })
+                      }
+                    />
+                    <TiresAndBatteriesPanel
+                      tires={selectedAmb.tires}
+                      batteries={selectedAmb.batteries}
+                      onUpdateTires={(tires) =>
+                        onUpdateBodyAndVisualState(selectedAmb.id, { tires })
+                      }
+                      onUpdateBatteries={(batteries) =>
+                        onUpdateBodyAndVisualState(selectedAmb.id, { batteries })
+                      }
+                    />
+                  </div>
+                )}
 
                 {/* Historial Integral / Línea Temporal del Vehículo (Incidencias, Órdenes Externas, Preventivos, Documentos y Movimientos de Stock) */}
                 <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">

@@ -19,7 +19,9 @@ import {
   MessageCircle,
   PackageCheck,
   ArrowUpDown,
+  QrCode,
 } from 'lucide-react';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
 
 interface PartsInventoryViewProps {
   spareParts: SparePart[];
@@ -56,6 +58,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
   const [newPart, setNewPart] = useState({
     sku: '',
@@ -143,7 +146,7 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
       .join('\n');
 
     const text = [
-      `📦 *SOLICITUD DE PEDIDO DE REPUESTOS — AMBUFLEET FLOTA*`,
+      `📦 *SOLICITUD DE PEDIDO DE REPUESTOS — AMBU-LZ*`,
       `Fecha: ${new Date().toISOString().split('T')[0]}`,
       ``,
       lines,
@@ -264,6 +267,14 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
               {totalUnitsInStock} uds.
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowBarcodeScanner(true)}
+            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5"
+          >
+            <QrCode className="w-4 h-4" />
+            Escanear QR / Barras
+          </button>
           <button
             type="button"
             onClick={() => setShowMovementModal(true)}
@@ -1076,6 +1087,30 @@ export const PartsInventoryView: React.FC<PartsInventoryViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+      {showBarcodeScanner && (
+        <BarcodeScannerModal
+          onDetected={(code) => {
+            setShowBarcodeScanner(false);
+            const normalized = code.trim().toLowerCase();
+            const match = spareParts.find(
+              (p) =>
+                p.sku.toLowerCase() === normalized ||
+                p.id.toLowerCase() === normalized
+            );
+            setSearchQuery(code.trim());
+            setSubTab('warehouse');
+            if (match) {
+              setNewMovForm((prev) => ({
+                ...prev,
+                partId: match.id,
+                type: 'Salida a reparación',
+              }));
+              setShowMovementModal(true);
+            }
+          }}
+          onClose={() => setShowBarcodeScanner(false)}
+        />
       )}
     </div>
   );

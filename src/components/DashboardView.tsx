@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Ambulance,
   PreventiveSchedule,
@@ -10,6 +10,12 @@ import {
   collectAllDocumentAlerts,
   getExpiryBadgeMeta,
 } from '../utils/expiryAlerts';
+import { exportFleetCalendarIcs } from '../utils/icsExport';
+import {
+  checkAndNotifyCriticalExpiries,
+  getNotificationPermission,
+  requestNotificationPermission,
+} from '../utils/notifications';
 import {
   Truck,
   Wrench,
@@ -21,6 +27,8 @@ import {
   ShieldAlert,
   Gauge,
   FileWarning,
+  CalendarPlus,
+  Bell,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -58,6 +66,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   ).length;
 
   const openWorkOrders = workOrders.filter((w) => w.status !== 'Cerrada');
+  const [notifyFeedback, setNotifyFeedback] = useState<string>('');
+  const [notifPerm, setNotifPerm] = useState<string>(() =>
+    getNotificationPermission()
+  );
+
+  const handleEnableNotifications = async () => {
+    const perm = await requestNotificationPermission();
+    setNotifPerm(perm);
+    if (perm === 'granted') {
+      const res = await checkAndNotifyCriticalExpiries(ambulances, true);
+      setNotifyFeedback(
+        res.criticalCount > 0
+          ? `Notificación enviada (${res.criticalCount} alertas críticas).`
+          : res.summary
+      );
+    } else {
+      setNotifyFeedback(
+        'Permiso de notificaciones denegado o no soportado en este navegador.'
+      );
+    }
+  };
   const pendingChecklists = checklists.filter(
     (c) => c.workshopStatus === 'Pendiente de Asignar Taller'
   );
@@ -252,12 +281,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ≤ 30 días: {days30DocsCount}
             </span>
             <button
+              type="button"
+              onClick={() =>
+                exportFleetCalendarIcs(ambulances, preventiveSchedules)
+              }
+              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold flex items-center gap-1"
+              title="Descargar vencimientos y preventivos en formato calendario .ICS"
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />
+              Exportar .ICS
+            </button>
+            <button
+              type="button"
+              onClick={handleEnableNotifications}
+              className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 border ${
+                notifPerm === 'granted'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+              }`}
+              title="Activar o probar notificaciones locales PWA de vencimientos críticos"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              {notifPerm === 'granted' ? 'Probar Aviso PWA' : 'Activar Avisos PWA'}
+            </button>
+            <button
               onClick={() => onNavigate('fleet')}
-              className="ml-2 text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+              className="ml-1 text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
             >
               Gestionar Documentos <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
+          {notifyFeedback && (
+            <div className="w-full text-[11px] font-semibold text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+              {notifyFeedback}
+            </div>
+          )}
         </div>
 
         <div className="p-5">
