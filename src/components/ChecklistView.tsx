@@ -871,7 +871,7 @@ export const ChecklistView: React.FC<ChecklistViewProps> = ({
             </div>
           </div>
         </form>
-      ) : (
+      ) : activeMode === 'history' ? (
         /* Historial de Checklists enviados a Taller */
         <div className="space-y-4">
           {checklists.map((chk) => {
