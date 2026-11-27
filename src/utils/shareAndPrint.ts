@@ -16,6 +16,16 @@ const escapeHtml = (unsafe?: string | number): string => {
     .replace(/'/g, '&#039;');
 };
 
+const getReportLogoHtml = (): string => {
+  const logoUrl =
+    typeof window !== 'undefined'
+      ? new URL('./logo-acciona-icot.png', window.location.href).href
+      : './logo-acciona-icot.png';
+  return `<img src="${escapeHtml(
+    logoUrl
+  )}" alt="Logo UTE Acciona ICOT" style="height:40px;width:auto;object-fit:contain;margin-bottom:8px;display:block;" />`;
+};
+
 export const shareChecklistViaWhatsApp = (
   chk: FleetChecklist,
   amb?: Ambulance
@@ -195,6 +205,7 @@ export const printChecklistReport = (chk: FleetChecklist, amb?: Ambulance) => {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px;">
         <div>
+          ${getReportLogoHtml()}
           <h1 style="font-size:18px;margin:0;">AMBU-LZFLOTA — PARTE DE INSPECCIÓN A TALLER</h1>
           <p style="font-size:12px;color:#475569;margin:4px 0 0;">Checklist del Responsable de Flota y Auditoría de Stock del Vehículo</p>
         </div>
@@ -322,6 +333,7 @@ export const printWorkOrderReport = (
       </div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px;">
         <div>
+          ${getReportLogoHtml()}
           <h1 style="font-size:18px;margin:0;">ORDEN DE REPARACIÓN EXTERNA — ${escapeHtml(
             wo.code
           )}</h1>
@@ -466,6 +478,7 @@ export const printPartsDeliveryNote = (
       </div>
       <div style="border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end;">
         <div>
+          ${getReportLogoHtml()}
           <h1 style="margin:0;font-size:20px;">ALBARÁN DE ENTREGA DE REPUESTOS PROPIOS</h1>
           <p style="margin:4px 0 0;font-size:12px;color:#475569;">Ambu-lzflota Gestión de Flota (Material de almacén propio sin cargo económico)</p>
         </div>
@@ -646,6 +659,7 @@ export const printBreakdownsManagementReport = (params: {
       </div>
       <div style="border-bottom:3px solid #0f172a;padding-bottom:10px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end;">
         <div>
+          ${getReportLogoHtml()}
           <h1 style="margin:0;font-size:20px;">INFORME DE ROTURAS Y AVERÍAS DE FLOTA</h1>
           <p style="margin:4px 0 0;font-size:12px;color:#475569;">Ambu-lzflota • Periodo: ${escapeHtml(
             params.fromDate || 'Inicio'

@@ -1,9 +1,10 @@
-const CACHE_NAME = 'ambu-lzflota-pwa-v14';
+const CACHE_NAME = 'ambu-lzflota-pwa-v15';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
   './icon.svg',
+  './logo-acciona-icot.png',
 ];
 
 self.addEventListener('install', (event) => {
