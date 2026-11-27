@@ -35,12 +35,17 @@ import {
   safeLoadFromStorage,
   safeSaveToStorage,
   getStorageUsageStats,
+  getStorageUsageStatsAsync,
   saveAutoBackupSnapshot,
-  loadAutoBackupSnapshot,
+  loadAutoBackupSnapshotAsync,
   getCloudSyncConfig,
   saveCloudSyncConfig,
   formatBytes,
 } from './utils/storage';
+import {
+  idbGet,
+  requestPersistentStorage,
+} from './utils/indexedDbStorage';
 import {
   DEFAULT_FIREBASE_CONFIG,
   FleetCollectionKey,
@@ -620,6 +625,7 @@ export function App() {
       'Copia automática tras cambio de datos'
     );
     setStorageStats(getStorageUsageStats());
+    getStorageUsageStatsAsync().then((stats) => setStorageStats(stats));
   }, [
     ambulances,
     workshops,
@@ -629,6 +635,48 @@ export function App() {
     spareParts,
     stockMovements,
   ]);
+
+  // Solicitar almacenamiento persistente e hidratar desde IndexedDB (alta capacidad > 5 MB)
+  useEffect(() => {
+    let cancelled = false;
+    requestPersistentStorage();
+    const hydrateFromIdb = async () => {
+      const [idbAmbs, idbWs, idbPrev, idbChk, idbWo, idbParts, idbMovs] =
+        await Promise.all([
+          idbGet<Ambulance[]>(`${STORAGE_KEY}_ambulances`),
+          idbGet<ExternalWorkshop[]>(`${STORAGE_KEY}_workshops`),
+          idbGet<PreventiveSchedule[]>(`${STORAGE_KEY}_preventive`),
+          idbGet<FleetChecklist[]>(`${STORAGE_KEY}_checklists`),
+          idbGet<WorkOrder[]>(`${STORAGE_KEY}_workorders`),
+          idbGet<SparePart[]>(`${STORAGE_KEY}_parts`),
+          idbGet<StockMovement[]>(`${STORAGE_KEY}_movements`),
+        ]);
+      if (cancelled) return;
+      isApplyingRemoteRef.current = true;
+      if (Array.isArray(idbAmbs) && idbAmbs.length > 0) {
+        setAmbulances(hydrateAmbulancesWithFullFleet(idbAmbs));
+      }
+      if (Array.isArray(idbWs) && idbWs.length > 0) setWorkshops(idbWs);
+      if (Array.isArray(idbPrev) && idbPrev.length > 0)
+        setPreventiveSchedules(idbPrev);
+      if (Array.isArray(idbChk) && idbChk.length > 0) setChecklists(idbChk);
+      if (Array.isArray(idbWo) && idbWo.length > 0)
+        setWorkOrders(hydrateWorkOrders(idbWo));
+      if (Array.isArray(idbParts) && idbParts.length > 0)
+        setSpareParts(hydrateSpareParts(idbParts));
+      if (Array.isArray(idbMovs) && idbMovs.length > 0)
+        setStockMovements(idbMovs);
+      queueMicrotask(() => {
+        isApplyingRemoteRef.current = false;
+      });
+      const stats = await getStorageUsageStatsAsync();
+      if (!cancelled) setStorageStats(stats);
+    };
+    hydrateFromIdb();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const recordStockMovement = (
     part: SparePart,
@@ -913,6 +961,29 @@ export function App() {
       ...prev,
       { ...sched, id: `prev-${Date.now()}` },
     ]);
+  };
+
+  const handleAddSchedulesBulk = (
+    items: Omit<PreventiveSchedule, 'id'>[]
+  ) => {
+    const baseTs = Date.now();
+    setPreventiveSchedules((prev) => [
+      ...prev,
+      ...items.map((item, idx) => ({
+        ...item,
+        id: `prev-${baseTs}-${idx}`,
+      })),
+    ]);
+  };
+
+  const handleUpdateSchedule = (updated: PreventiveSchedule) => {
+    setPreventiveSchedules((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s))
+    );
+  };
+
+  const handleDeleteSchedule = (scheduleId: string) => {
+    setPreventiveSchedules((prev) => prev.filter((s) => s.id !== scheduleId));
   };
 
   const handleCompletePreventive = (scheduleId: string) => {
@@ -1466,8 +1537,8 @@ export function App() {
     reader.readAsText(file);
   };
 
-  const handleRestoreAutoBackup = () => {
-    const snap = loadAutoBackupSnapshot<{
+  const handleRestoreAutoBackup = async () => {
+    const snap = await loadAutoBackupSnapshotAsync<{
       ambulances?: Ambulance[];
       workshops?: ExternalWorkshop[];
       preventiveSchedules?: PreventiveSchedule[];
@@ -2262,6 +2333,9 @@ export function App() {
             ambulances={ambulances}
             schedules={preventiveSchedules}
             onAddSchedule={handleAddSchedule}
+            onAddSchedulesBulk={handleAddSchedulesBulk}
+            onUpdateSchedule={handleUpdateSchedule}
+            onDeleteSchedule={handleDeleteSchedule}
             onCompletePreventive={handleCompletePreventive}
             onGenerateWorkOrderFromPreventive={
               handleGenerateWorkOrderFromPreventive

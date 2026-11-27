@@ -111,6 +111,8 @@ export type PreventiveCategory =
   | 'Sistema Eléctrico y Baterías'
   | 'Suspensión y Dirección'
   | 'Climatización y Célula Sanitaria'
+  | 'Electromedicina y Camilla'
+  | 'Desinfección y Oxigenoterapia'
   | 'ITV / Legal';
 
 export interface PreventiveSchedule {

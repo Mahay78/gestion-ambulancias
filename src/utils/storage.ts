@@ -1,6 +1,12 @@
+import {
+  estimateBrowserStorageQuota,
+  idbGet,
+  idbSet,
+} from './indexedDbStorage';
+
 export const STORAGE_KEY = 'ambufleet_mechanics_v1';
-const AUTO_BACKUP_KEY = `${STORAGE_KEY}_auto_backup_snapshot`;
-const MAX_LOCAL_STORAGE_BYTES = 5 * 1024 * 1024; // ~5 MB estándar en navegadores
+export const AUTO_BACKUP_KEY = `${STORAGE_KEY}_auto_backup_snapshot`;
+const MAX_LOCAL_STORAGE_BYTES = 5 * 1024 * 1024; // ~5 MB fallback en localStorage; IndexedDB amplía a cientos de MB/GB
 
 export interface AutoBackupSnapshot<T = Record<string, unknown>> {
   version: number;
@@ -61,6 +67,20 @@ export const getStorageUsageStats = (): StorageUsageStats => {
   }
 };
 
+export const getStorageUsageStatsAsync = async (): Promise<StorageUsageStats> => {
+  const est = await estimateBrowserStorageQuota();
+  if (est && est.quotaBytes > MAX_LOCAL_STORAGE_BYTES) {
+    return {
+      usedBytes: est.usedBytes,
+      maxBytes: est.quotaBytes,
+      usagePercent: est.usagePercent,
+      isWarning: est.usagePercent >= 75,
+      isCritical: est.usagePercent >= 90,
+    };
+  }
+  return getStorageUsageStats();
+};
+
 export const safeLoadFromStorage = <T,>(key: string, fallback: T): T => {
   try {
     const saved = localStorage.getItem(key);
@@ -86,29 +106,35 @@ export const safeSaveToStorage = (
   value: unknown,
   onQuotaExceeded?: () => void
 ): boolean => {
+  // Guardar siempre en IndexedDB (alta capacidad: cientos de MB / GB)
+  idbSet(key, value).then((ok) => {
+    if (!ok && onQuotaExceeded) {
+      onQuotaExceeded();
+    }
+  });
+
+  // Espejo síncrono en localStorage mientras quepa en sus 5 MB
   try {
     localStorage.setItem(key, JSON.stringify(value));
     return true;
   } catch {
-    console.warn(
-      `[AmbuFleet] Cuota de almacenamiento local alcanzada al guardar ${key}.`
-    );
-    if (onQuotaExceeded) onQuotaExceeded();
-    return false;
+    // Si localStorage llena sus 5 MB, IndexedDB sigue guardando todo sin perder datos
+    return true;
   }
 };
 
 export const saveAutoBackupSnapshot = <T,>(payload: T, reason = 'Guardado automático'): void => {
+  const snapshot: AutoBackupSnapshot<T> = {
+    version: 2,
+    timestamp: new Date().toISOString(),
+    reason,
+    payload,
+  };
+  void idbSet(AUTO_BACKUP_KEY, snapshot);
   try {
-    const snapshot: AutoBackupSnapshot<T> = {
-      version: 2,
-      timestamp: new Date().toISOString(),
-      reason,
-      payload,
-    };
     localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify(snapshot));
   } catch {
-    // Si la cuota está al límite, no sobrescribimos el snapshot existente con un error
+    // IndexedDB ya almacenó el snapshot aunque localStorage esté al límite
   }
 };
 
@@ -119,6 +145,12 @@ export const loadAutoBackupSnapshot = <T,>(): AutoBackupSnapshot<T> | null => {
   } catch {
     return null;
   }
+};
+
+export const loadAutoBackupSnapshotAsync = async <T,>(): Promise<AutoBackupSnapshot<T> | null> => {
+  const fromIdb = await idbGet<AutoBackupSnapshot<T>>(AUTO_BACKUP_KEY);
+  if (fromIdb) return fromIdb;
+  return loadAutoBackupSnapshot<T>();
 };
 
 export const getCloudSyncConfig = (): CloudSyncConfig => {
