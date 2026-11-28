@@ -675,11 +675,16 @@ export function App() {
       });
     };
 
-    const unsubReports = subscribePendingUnitReports(
-      (reports: UnitBreakdownReport[]) => handleIncomingUnitReports(reports, false),
-      pid,
-      key
-    );
+    let unsubReports: (() => void) | undefined;
+    let cancelled = false;
+    void ensureFirebaseAuthSession(pid, key).then(() => {
+      if (cancelled) return;
+      unsubReports = subscribePendingUnitReports(
+        (reports: UnitBreakdownReport[]) => handleIncomingUnitReports(reports, false),
+        pid,
+        key
+      );
+    });
 
     const checkDriveReports = () => {
       void fetchPendingUnitReportsFromDrive().then((driveReps) => {
@@ -692,7 +697,8 @@ export function App() {
     const driveInterval = window.setInterval(checkDriveReports, 60000);
 
     return () => {
-      unsubReports();
+      cancelled = true;
+      if (unsubReports) unsubReports();
       window.clearInterval(driveInterval);
     };
   }, [isAuthenticated, cloudConfig.enabled, cloudConfig.firebaseProjectId, cloudConfig.firebaseApiKey, isOnline]);

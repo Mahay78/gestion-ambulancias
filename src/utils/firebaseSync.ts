@@ -432,7 +432,8 @@ const submitUnitReportViaRest = async (
   reportId: string,
   sanitized: Record<string, unknown>,
   projectId: string,
-  apiKey: string
+  apiKey: string,
+  idToken?: string
 ): Promise<void> => {
   const fields: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(sanitized)) {
@@ -444,10 +445,15 @@ const submitUnitReportViaRest = async (
     reportId
   )}?key=${encodeURIComponent(apiKey)}`;
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (idToken) {
+    headers.Authorization = `Bearer ${idToken}`;
+  }
+
   const res = await withTimeout(
     fetch(url, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ fields }),
     }),
     10000,
@@ -470,13 +476,20 @@ export const submitUnitBreakdownReport = async (
     )
   );
 
+  let authRes: { ok: boolean; user?: User; error?: string } = { ok: false };
   try {
     const { db } = getFirebaseServices(projectId, apiKey);
-    await withTimeout(
+    authRes = await withTimeout(
       ensureFirebaseAuthSession(projectId, apiKey),
       4000,
       'auth'
-    ).catch(() => undefined);
+    ).catch((authErr) => ({
+      ok: false,
+      error:
+        authErr instanceof Error
+          ? authErr.message
+          : 'No se pudo iniciar sesión anónima en Firebase Auth.',
+    }));
 
     await withTimeout(
       setDoc(doc(db, 'ambufleet_unit_reports', report.id), sanitized),
@@ -491,9 +504,26 @@ export const submitUnitBreakdownReport = async (
     const isTooLarge =
       rawMsg.includes('exceeds') || rawMsg.includes('too large');
 
-    if (!isPermission && !isTooLarge) {
+    if (isTooLarge) {
+      return {
+        ok: false,
+        error: 'Las fotos pesan demasiado para un único envío. Prueba con menos fotos.',
+      };
+    }
+
+    if (!isPermission) {
       try {
-        await submitUnitReportViaRest(report.id, sanitized, projectId, apiKey);
+        const { auth } = getFirebaseServices(projectId, apiKey);
+        const idToken = auth.currentUser
+          ? await auth.currentUser.getIdToken().catch(() => undefined)
+          : undefined;
+        await submitUnitReportViaRest(
+          report.id,
+          sanitized,
+          projectId,
+          apiKey,
+          idToken
+        );
         return { ok: true };
       } catch (restErr) {
         const restMsg =
@@ -517,12 +547,18 @@ export const submitUnitBreakdownReport = async (
       }
     }
 
-    const friendly = isPermission
-      ? 'Permiso denegado en Firestore. Verifica las reglas de ambufleet_unit_reports en Firebase Console.'
-      : 'Las fotos pesan demasiado para un único envío. Prueba con menos fotos.';
+    // Si Firestore deniega permiso, intentar respaldo gratuito en Google Drive/Sheets
+    const driveRes = await submitUnitReportToDriveFallback(report);
+    if (driveRes.ok) {
+      return { ok: true, viaDriveFallback: true };
+    }
+
+    const authHint = !authRes.ok
+      ? ` (Sesión anónima fallida: ${authRes.error || 'activa Autenticación Anónima y añade mahay78.github.io en Dominios autorizados en Firebase Console'})`
+      : '';
     return {
       ok: false,
-      error: friendly,
+      error: `Permiso denegado en Firestore. Verifica las reglas de ambufleet_unit_reports en Firebase Console${authHint}.`,
     };
   }
 };
@@ -559,6 +595,7 @@ export const markUnitReportImported = async (
 ): Promise<void> => {
   try {
     const { db } = getFirebaseServices(projectId, apiKey);
+    await ensureFirebaseAuthSession(projectId, apiKey);
     await setDoc(
       doc(db, 'ambufleet_unit_reports', reportId),
       { status: 'imported' },
@@ -578,6 +615,7 @@ export const fetchLastUnitReportByPlate = async (
   if (!clean) return null;
   try {
     const { db } = getFirebaseServices(projectId, apiKey);
+    await ensureFirebaseAuthSession(projectId, apiKey);
     const snap = await getDocs(collection(db, 'ambufleet_unit_reports'));
     const matches: UnitBreakdownReport[] = [];
     snap.forEach((d) => {

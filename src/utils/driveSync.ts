@@ -278,6 +278,7 @@ export const appendClosedReportToGoogleSheet = async (record: {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
+        token: getDriveSecretToken(),
         action: 'append_closed_report',
         record,
       }),
@@ -327,6 +328,7 @@ export const submitUnitReportToDriveFallback = async (
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
+        token: getDriveSecretToken(),
         action: 'submit_unit_report',
         report: {
           ...report,
@@ -354,7 +356,10 @@ export const fetchPendingUnitReportsFromDrive = async (): Promise<DriveUnitRepor
     const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'get_pending_unit_reports' }),
+      body: JSON.stringify({
+        token: getDriveSecretToken(),
+        action: 'get_pending_unit_reports',
+      }),
     });
     if (!res.ok) return [];
     const data = (await res.json()) as { ok?: boolean; reports?: DriveUnitReport[] };
@@ -371,7 +376,11 @@ export const markUnitReportImportedInDrive = async (reportId: string): Promise<v
     await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'mark_unit_report_imported', reportId }),
+      body: JSON.stringify({
+        token: getDriveSecretToken(),
+        action: 'mark_unit_report_imported',
+        reportId,
+      }),
     });
   } catch {
     // ignorar
